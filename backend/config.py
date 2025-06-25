@@ -23,9 +23,11 @@ class Settings:
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
-    # Validate required settings
+    # Validate required settings - but don't crash on startup
     def __init__(self):
         if not self.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
+            print("⚠️  WARNING: OPENAI_API_KEY environment variable is not set")
+            print("💡 AI features will not work until OPENAI_API_KEY is set in Railway")
+            print("💡 Set OPENAI_API_KEY in Railway environment variables to enable AI insights")
 
 settings = Settings() 
