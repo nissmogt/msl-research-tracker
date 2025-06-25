@@ -1,0 +1,26 @@
+# Root requirements.txt for Railway deployment
+# This file tells Railway this is a Python project
+# The actual dependencies are in backend/requirements.txt
+
+# FastAPI and server dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Database
+sqlalchemy==2.0.23
+pydantic==2.5.0
+psycopg2-binary==2.9.9
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# AI and external services
+openai==1.86.0
+biopython==1.83
+python-dotenv==1.0.0
+feedparser==6.0.11
+requests==2.31.0
+schedule==1.2.1
+email-validator==2.2.0 

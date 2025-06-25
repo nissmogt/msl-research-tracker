@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+.venv/
+env/
+.env
+
+# Database files
+*.sqlite3
+*.db
+msl_research.db
+
+# Frontend
+frontend/node_modules/
+frontend/build/
+frontend/.pnp.js
+frontend/.pnp.loader.js
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store 
