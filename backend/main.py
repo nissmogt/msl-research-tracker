@@ -32,14 +32,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000", 
-        "http://127.0.0.1:3000", 
-        "http://localhost:3001", 
-        "http://127.0.0.1:3001",
-        "https://*.railway.app",  # Allow Railway domains
-        "https://*.vercel.app",   # Allow Vercel domains
-        "https://*.netlify.app",  # Allow Netlify domains
-        os.getenv("FRONTEND_URL", "")  # Custom frontend URL
+        "http://localhost:3000",
+        "https://msl-research-tracker.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
