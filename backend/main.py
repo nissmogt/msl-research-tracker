@@ -12,7 +12,8 @@ from schemas import (
     ArticleResponse, SearchRequest,
     ConversationCreate, ConversationResponse,
     MessageCreate, MessageResponse,
-    InsightRequest
+    InsightRequest,
+    FetchPubmedRequest
 )
 from services import (
     ArticleService, ConversationService, AIService
@@ -76,12 +77,11 @@ async def get_recent_articles(
 # PubMed integration endpoints
 @app.post("/articles/fetch-pubmed")
 async def fetch_pubmed_articles(
-    therapeutic_area: str,
-    days_back: int = 7,
+    request: FetchPubmedRequest,
     db: Session = Depends(get_db)
 ):
     pubmed_service = PubMedService()
-    articles = pubmed_service.search_articles(therapeutic_area, days_back)
+    articles = pubmed_service.search_articles(request.therapeutic_area, request.days_back)
     if articles:
         saved_count = pubmed_service.save_articles_to_db(db, articles)
         return {
@@ -143,6 +143,13 @@ async def generate_insights(
     ai_service = AIService()
     article_service = ArticleService(db)
     article = article_service.get_article_by_pubmed_id(pubmed_id)
+    if not article:
+        # Try to fetch from PubMed and save
+        pubmed_service = PubMedService()
+        article_data = pubmed_service._fetch_article_details(pubmed_id)
+        if article_data:
+            pubmed_service.save_articles_to_db(db, [article_data])
+            article = article_service.get_article_by_pubmed_id(pubmed_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
     insights = ai_service.generate_medical_affairs_insights(article)

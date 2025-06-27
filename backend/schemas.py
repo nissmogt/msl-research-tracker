@@ -78,4 +78,8 @@ class MessageResponse(MessageBase):
     created_at: datetime
     
     class Config:
-        from_attributes = True 
+        from_attributes = True
+
+class FetchPubmedRequest(BaseModel):
+    therapeutic_area: str
+    days_back: int = 7 
