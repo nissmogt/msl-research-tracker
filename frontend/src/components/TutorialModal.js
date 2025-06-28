@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const steps = [
   {
@@ -33,6 +33,23 @@ const steps = [
 
 export default function TutorialModal({ open, onClose }) {
   const [step, setStep] = useState(0);
+
+  // Reset step to 0 whenever modal is opened
+  useEffect(() => {
+    if (open) setStep(0);
+  }, [open]);
+
+  // Disable background scroll when modal is open
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [open]);
 
   if (!open) return null;
 

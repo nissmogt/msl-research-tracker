@@ -33,26 +33,29 @@ function Dashboard() {
   ];
 
   useEffect(() => {
+    console.log('[Dashboard] Mount: loading recent articles');
     loadRecentArticles();
   }, []);
 
   const loadRecentArticles = async () => {
     setLoading(true);
+    console.log('[Dashboard] Loading recent articles for daysBack:', daysBack);
     try {
       const response = await axios.get('/articles/recent', {
         params: { days_back: daysBack }
       });
       setArticles(response.data);
+      console.log('[Dashboard] Articles loaded:', response.data);
     } catch (error) {
-      console.error('Error loading articles:', error);
+      console.error('[Dashboard] Error loading articles:', error);
     }
     setLoading(false);
   };
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
-    
     setLoading(true);
+    console.log('[Dashboard] Searching for:', searchTerm, 'mode:', searchMode, 'daysBack:', daysBack);
     try {
       const endpoint = searchMode === 'pubmed' ? '/articles/search-pubmed' : '/articles/search';
       const response = await axios.post(endpoint, {
@@ -60,24 +63,24 @@ function Dashboard() {
         days_back: daysBack
       });
       setArticles(response.data);
+      console.log('[Dashboard] Search results:', response.data);
     } catch (error) {
-      console.error('Error searching articles:', error);
+      console.error('[Dashboard] Error searching articles:', error);
     }
     setLoading(false);
   };
 
   const handleSaveArticle = async (article) => {
     try {
-      // Save the article to the local database
+      console.log('[Dashboard] Saving article:', article);
       const response = await axios.post('/articles/fetch-pubmed', {
         therapeutic_area: article.therapeutic_area || searchTerm,
         days_back: daysBack
       });
-      console.log('Article saved:', response.data);
-      // Optionally refresh the article list
+      console.log('[Dashboard] Article saved:', response.data);
       loadRecentArticles();
     } catch (error) {
-      console.error('Error saving article:', error);
+      console.error('[Dashboard] Error saving article:', error);
     }
   };
 
@@ -167,17 +170,23 @@ function Dashboard() {
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-y-auto">
           {selectedArticle ? (
             <ArticleDetail 
               article={selectedArticle} 
-              onBack={() => setSelectedArticle(null)}
+              onBack={() => {
+                setSelectedArticle(null);
+                console.log('[Dashboard] Back to article list');
+              }}
             />
           ) : (
             <ArticleList 
               articles={articles}
               loading={loading}
-              onArticleSelect={setSelectedArticle}
+              onArticleSelect={(article) => {
+                setSelectedArticle(article);
+                console.log('[Dashboard] Article selected:', article);
+              }}
               onSaveArticle={handleSaveArticle}
             />
           )}

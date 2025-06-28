@@ -17,7 +17,7 @@ function Dashboard() {
   // ...existing code...
 
   return (
-    <div className="h-screen flex bg-gray-50">
+    <div className="h-screen flex flex-col bg-gray-50">
       {/* Tutorial Modal */}
       <TutorialModal open={showTutorial} onClose={handleTutorialClose} />
       {/* '?' Button */}
@@ -30,7 +30,9 @@ function Dashboard() {
         ?
       </button>
       {/* Main Content */}
-      {/* ...existing content... */}
+      <div className="flex-1 overflow-y-auto">
+        {/* ...existing content... */}
+      </div>
     </div>
   );
 }
