@@ -60,7 +60,8 @@ class PubMedService:
             articles = []
             for article_id in article_ids:
                 article_data = self._fetch_article_details(article_id)
-                if article_data:
+                # Only append if abstract is not empty or whitespace
+                if article_data and article_data.get('abstract') and article_data['abstract'].strip() != '':
                     articles.append(article_data)
                 time.sleep(self.delay)  # Respect NCBI rate limits
             

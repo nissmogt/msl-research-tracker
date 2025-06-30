@@ -3,16 +3,12 @@ import axios from 'axios';
 import { 
   Search, 
   Loader,
-  MessageSquare, 
-  Plus, 
-  Brain,
-  ExternalLink,
-  Calendar,
   Database,
   Globe
 } from 'lucide-react';
 import ArticleList from './ArticleList';
 import ArticleDetail from './ArticleDetail';
+import TutorialModal from './TutorialModal';
 
 function Dashboard() {
   const [articles, setArticles] = useState([]);
@@ -21,6 +17,9 @@ function Dashboard() {
   const [daysBack, setDaysBack] = useState(7);
   const [loading, setLoading] = useState(false);
   const [searchMode, setSearchMode] = useState('local'); // 'local' or 'pubmed'
+  const [showTutorial, setShowTutorial] = useState(() => {
+    return localStorage.getItem('msl_tutorial_complete') !== 'true';
+  });
 
   // Therapeutic areas for demo
   const therapeuticAreas = [
@@ -33,19 +32,17 @@ function Dashboard() {
   ];
 
   useEffect(() => {
-    console.log('[Dashboard] Mount: loading recent articles');
     loadRecentArticles();
+    // eslint-disable-next-line
   }, []);
 
   const loadRecentArticles = async () => {
     setLoading(true);
-    console.log('[Dashboard] Loading recent articles for daysBack:', daysBack);
     try {
       const response = await axios.get('/articles/recent', {
         params: { days_back: daysBack }
       });
       setArticles(response.data);
-      console.log('[Dashboard] Articles loaded:', response.data);
     } catch (error) {
       console.error('[Dashboard] Error loading articles:', error);
     }
@@ -55,7 +52,6 @@ function Dashboard() {
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
     setLoading(true);
-    console.log('[Dashboard] Searching for:', searchTerm, 'mode:', searchMode, 'daysBack:', daysBack);
     try {
       const endpoint = searchMode === 'pubmed' ? '/articles/search-pubmed' : '/articles/search';
       const response = await axios.post(endpoint, {
@@ -63,7 +59,6 @@ function Dashboard() {
         days_back: daysBack
       });
       setArticles(response.data);
-      console.log('[Dashboard] Search results:', response.data);
     } catch (error) {
       console.error('[Dashboard] Error searching articles:', error);
     }
@@ -72,20 +67,39 @@ function Dashboard() {
 
   const handleSaveArticle = async (article) => {
     try {
-      console.log('[Dashboard] Saving article:', article);
-      const response = await axios.post('/articles/fetch-pubmed', {
+      await axios.post('/articles/fetch-pubmed', {
         therapeutic_area: article.therapeutic_area || searchTerm,
         days_back: daysBack
       });
-      console.log('[Dashboard] Article saved:', response.data);
       loadRecentArticles();
     } catch (error) {
       console.error('[Dashboard] Error saving article:', error);
     }
   };
 
+  const handleTutorialClose = () => {
+    setShowTutorial(false);
+    localStorage.setItem('msl_tutorial_complete', 'true');
+  };
+
+  const handleTutorialOpen = () => {
+    setShowTutorial(true);
+  };
+
   return (
     <div className="h-screen flex bg-gray-50">
+      {/* Tutorial Modal */}
+      <TutorialModal open={showTutorial} onClose={handleTutorialClose} />
+      {/* '?' Button - bottom right, floating, unobtrusive */}
+      <button
+        onClick={handleTutorialOpen}
+        className="fixed bottom-6 right-6 z-40 bg-primary-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg hover:bg-primary-700 focus:outline-none"
+        title="Show tutorial"
+        style={{ fontSize: 28, fontWeight: 'bold' }}
+        aria-label="Show tutorial"
+      >
+        ?
+      </button>
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Search Section */}
@@ -106,7 +120,6 @@ function Dashboard() {
                 />
               </div>
             </div>
-            
             <div className="flex gap-2">
               <select
                 value={daysBack}
@@ -118,7 +131,6 @@ function Dashboard() {
                 <option value={30}>Last 30 days</option>
                 <option value={90}>Last 90 days</option>
               </select>
-              
               <button
                 onClick={handleSearch}
                 disabled={loading}
@@ -133,7 +145,6 @@ function Dashboard() {
               </button>
             </div>
           </div>
-          
           {/* Search Mode Toggle */}
           <div className="mt-3 flex items-center gap-4">
             <div className="flex items-center space-x-4">
@@ -168,44 +179,23 @@ function Dashboard() {
             </div>
           </div>
         </div>
-
         {/* Content Area */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           {selectedArticle ? (
             <ArticleDetail 
               article={selectedArticle} 
-              onBack={() => {
-                setSelectedArticle(null);
-                console.log('[Dashboard] Back to article list');
-              }}
+              onBack={() => setSelectedArticle(null)}
             />
           ) : (
             <ArticleList 
               articles={articles}
               loading={loading}
-              onArticleSelect={(article) => {
-                setSelectedArticle(article);
-                console.log('[Dashboard] Article selected:', article);
-              }}
+              onArticleSelect={setSelectedArticle}
               onSaveArticle={handleSaveArticle}
             />
           )}
         </div>
       </div>
-
-      {/* Chat Sidebar - Commented out for MVP */}
-      {/*
-      <div className={`w-80 bg-white border-l border-gray-200 transition-transform duration-300 ease-in-out ${showChat ? 'translate-x-0' : 'translate-x-full'}`}>
-        <ChatSidebar
-          conversations={conversations}
-          selectedConversation={selectedConversation}
-          onConversationSelect={setSelectedConversation}
-          onNewConversation={handleNewConversation}
-          onSendMessage={handleSendMessage}
-          onClose={() => setShowChat(false)}
-        />
-      </div>
-      */}
     </div>
   );
 }

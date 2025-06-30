@@ -27,7 +27,7 @@ const steps = [
   },
   {
     title: 'Access Tutorial Anytime',
-    content: `You can always revisit this tutorial by clicking the "?" button in the top right corner.`,
+    content: `You can always revisit this tutorial by clicking the "?" button in the bottom right corner.`,
   },
 ];
 

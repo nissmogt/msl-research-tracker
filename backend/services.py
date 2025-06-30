@@ -28,7 +28,9 @@ class ArticleService:
         
         articles = self.db.query(Article).filter(
             Article.therapeutic_area == therapeutic_area,
-            Article.created_at >= cutoff_date
+            Article.created_at >= cutoff_date,
+            Article.abstract != None,
+            Article.abstract != ''
         ).order_by(Article.created_at.desc()).all()
         
         return articles
@@ -37,7 +39,11 @@ class ArticleService:
         """Get recent articles from database"""
         cutoff_date = datetime.now() - timedelta(days=days_back)
         
-        query = self.db.query(Article).filter(Article.created_at >= cutoff_date)
+        query = self.db.query(Article).filter(
+            Article.created_at >= cutoff_date,
+            Article.abstract != None,
+            Article.abstract != ''
+        )
         
         if therapeutic_area:
             query = query.filter(Article.therapeutic_area == therapeutic_area)
