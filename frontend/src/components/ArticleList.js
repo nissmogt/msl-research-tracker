@@ -21,7 +21,7 @@ function ArticleList({ articles, loading, onArticleSelect, onSaveArticle }) {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 h-full max-h-full overflow-y-auto">
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-gray-900">
           {articles.length} article{articles.length !== 1 ? 's' : ''} found
