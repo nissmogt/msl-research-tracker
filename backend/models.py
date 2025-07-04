@@ -9,7 +9,9 @@ class TherapeuticArea(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
     description = Column(Text)
-    
+    parent_id = Column(Integer, ForeignKey('therapeutic_areas.id'), nullable=True)
+
+    parent = relationship('TherapeuticArea', remote_side=[id], backref='children')
     conversations = relationship("Conversation", back_populates="therapeutic_area")
 
 class Article(Base):

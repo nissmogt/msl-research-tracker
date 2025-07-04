@@ -19,6 +19,7 @@ from services import (
     ArticleService, ConversationService, AIService
 )
 from pubmed_service import PubMedService
+from clinicaltrials_service import ClinicalTrialsService
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -124,6 +125,25 @@ async def search_pubmed_only(
         })
     
     return response_articles
+
+# Clinical Trials endpoints
+@app.post("/trials/search")
+async def search_clinical_trials(
+    request: SearchRequest
+):
+    """Search ClinicalTrials.gov for clinical trials"""
+    clinical_trials_service = ClinicalTrialsService()
+    trials = clinical_trials_service.search_trials(request.therapeutic_area, max_results=20)
+    return trials
+
+@app.get("/trials/{nct_id}")
+async def get_trial_details(nct_id: str):
+    """Get detailed information for a specific clinical trial"""
+    clinical_trials_service = ClinicalTrialsService()
+    trial = clinical_trials_service.get_trial_details(nct_id)
+    if not trial:
+        raise HTTPException(status_code=404, detail="Trial not found")
+    return trial
 
 @app.get("/therapeutic-areas")
 async def get_therapeutic_areas(
