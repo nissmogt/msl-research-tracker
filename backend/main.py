@@ -5,6 +5,7 @@ from typing import List, Optional
 import uvicorn
 import json
 import os
+from datetime import datetime
 
 from database import get_db, engine
 from models import Base
@@ -38,9 +39,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+async def health_check():
+    try:
+        # Test database connection
+        db = next(get_db())
+        result = db.execute("SELECT 1").fetchone()
+        db.close()
+        
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "timestamp": datetime.now().isoformat(),
+            "port": os.environ.get("PORT", "unknown"),
+            "database_url": "configured" if os.environ.get("DATABASE_URL") else "missing"
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "database": f"error: {str(e)}",
+            "timestamp": datetime.now().isoformat(),
+            "port": os.environ.get("PORT", "unknown"),
+            "database_url": "configured" if os.environ.get("DATABASE_URL") else "missing"
+        }
+
 @app.get("/")
 async def root():
-    return {"message": "MSL Research Tracker API"}
+    return {
+        "message": "MSL Research Tracker API",
+        "status": "running",
+        "version": "1.0.0"
+    }
 
 # Article search endpoints
 @app.post("/articles/search", response_model=List[ArticleResponse])
@@ -218,7 +247,4 @@ async def add_message(
     db: Session = Depends(get_db)
 ):
     conversation_service = ConversationService(db)
-    return conversation_service.add_message(conversation_id, message)
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    return conversation_service.add_message(conversation_id, message) 
