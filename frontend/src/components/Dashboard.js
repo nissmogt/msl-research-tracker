@@ -20,6 +20,7 @@ function Dashboard() {
   const [showTutorial, setShowTutorial] = useState(() => {
     return localStorage.getItem('msl_tutorial_complete') !== 'true';
   });
+  const [searchStatus, setSearchStatus] = useState('');
 
   // Therapeutic areas for demo
   const therapeuticAreas = [
@@ -52,15 +53,26 @@ function Dashboard() {
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
     setLoading(true);
+    setSearchStatus('Searching local database...');
+    
     try {
       const endpoint = searchMode === 'pubmed' ? '/articles/search-pubmed' : '/articles/search';
+      
+      if (searchMode === 'pubmed') {
+        setSearchStatus('Searching PubMed (this may take 30+ seconds)...');
+      } else {
+        setSearchStatus('Searching local database and PubMed if needed...');
+      }
+      
       const response = await axios.post(endpoint, {
         therapeutic_area: searchTerm,
         days_back: daysBack
       });
       setArticles(response.data);
+      setSearchStatus('');
     } catch (error) {
       console.error('[Dashboard] Error searching articles:', error);
+      setSearchStatus('Search failed');
     }
     setLoading(false);
   };
@@ -181,6 +193,12 @@ function Dashboard() {
         </div>
         {/* Content Area */}
         <div className="flex-1 min-h-0 overflow-y-auto">
+          {loading && (
+            <div className="text-center p-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
+              <p className="text-sm text-gray-600">{searchStatus}</p>
+            </div>
+          )}
           {selectedArticle ? (
             <ArticleDetail 
               article={selectedArticle} 

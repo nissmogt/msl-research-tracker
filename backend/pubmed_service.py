@@ -5,6 +5,10 @@ from typing import List, Dict, Optional
 import time
 from sqlalchemy.orm import Session
 import json
+import asyncio
+import aiohttp
+from concurrent.futures import ThreadPoolExecutor
+import threading
 
 from models import Article
 from services import ArticleService
@@ -12,101 +16,129 @@ from services import ArticleService
 class PubMedService:
     def __init__(self):
         self.base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-        self.api_key = None  # Optional: Get from https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/
-        self.delay = 0.34  # NCBI requires 3 requests per second max
+        self.api_key = None
+        self.delay = 0.1  # Much faster
+        self.max_results = 30
+        self.batch_size = 10  # Process 10 articles at once
     
     def search_articles(self, therapeutic_area: str, days_back: int = 7) -> List[Dict]:
-        """Search PubMed for articles in the specified therapeutic area"""
+        """Search PubMed for articles - FAST VERSION"""
         try:
-            # Calculate date range
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=days_back)
-            
-            # Format dates for PubMed
-            start_date_str = start_date.strftime("%Y/%m/%d")
-            end_date_str = end_date.strftime("%Y/%m/%d")
-            
-            # Build search query
-            query = f'"{therapeutic_area}"[Title/Abstract] AND ("{start_date_str}"[Date - Publication] : "{end_date_str}"[Date - Publication])'
-            
-            # Search for article IDs
-            search_url = f"{self.base_url}/esearch.fcgi"
-            params = {
-                'db': 'pubmed',
-                'term': query,
-                'retmode': 'xml',
-                'retmax': 50,  # Limit results
-                'sort': 'date'
-            }
-            
-            if self.api_key:
-                params['api_key'] = self.api_key
-            
-            response = requests.get(search_url, params=params)
-            response.raise_for_status()
-            
-            # Parse search results
-            root = ET.fromstring(response.content)
-            id_list = root.find('.//IdList')
-            
-            if id_list is None or len(id_list) == 0:
-                print(f"No articles found for {therapeutic_area}")
+            # Step 1: Get article IDs (same as before)
+            article_ids = self._get_article_ids(therapeutic_area, days_back)
+            if not article_ids:
                 return []
             
-            # Get article IDs
-            article_ids = [id_elem.text for id_elem in id_list.findall('Id')]
-            
-            # Fetch article details
-            articles = []
-            for article_id in article_ids:
-                article_data = self._fetch_article_details(article_id)
-                # Only append if abstract is not empty or whitespace
-                if article_data and article_data.get('abstract') and article_data['abstract'].strip() != '':
-                    articles.append(article_data)
-                time.sleep(self.delay)  # Respect NCBI rate limits
-            
+            # Step 2: Batch fetch article details (PARALLEL!)
+            articles = self._batch_fetch_articles(article_ids)
             return articles
             
         except Exception as e:
             print(f"Error searching PubMed: {e}")
             return []
     
-    def _fetch_article_details(self, pubmed_id: str) -> Optional[Dict]:
-        """Fetch detailed information for a specific article"""
+    def _get_article_ids(self, therapeutic_area: str, days_back: int) -> List[str]:
+        """Get article IDs from PubMed search"""
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days_back)
+        
+        start_date_str = start_date.strftime("%Y/%m/%d")
+        end_date_str = end_date.strftime("%Y/%m/%d")
+        
+        query = f'"{therapeutic_area}"[Title/Abstract] AND ("{start_date_str}"[Date - Publication] : "{end_date_str}"[Date - Publication])'
+        
+        search_url = f"{self.base_url}/esearch.fcgi"
+        params = {
+            'db': 'pubmed',
+            'term': query,
+            'retmode': 'xml',
+            'retmax': self.max_results,
+            'sort': 'date'
+        }
+        
+        if self.api_key:
+            params['api_key'] = self.api_key
+        
+        response = requests.get(search_url, params=params, timeout=10)
+        response.raise_for_status()
+        
+        root = ET.fromstring(response.content)
+        id_list = root.find('.//IdList')
+        
+        if id_list is None or len(id_list) == 0:
+            return []
+        
+        return [id_elem.text for id_elem in id_list.findall('Id')]
+    
+    def _batch_fetch_articles(self, article_ids: List[str]) -> List[Dict]:
+        """Fetch multiple articles in parallel - MUCH FASTER!"""
+        if not article_ids:
+            return []
+        
+        # Use PubMed's batch fetch API (up to 200 IDs at once!)
+        fetch_url = f"{self.base_url}/efetch.fcgi"
+        params = {
+            'db': 'pubmed',
+            'id': ','.join(article_ids),  # Comma-separated IDs
+            'retmode': 'xml'
+        }
+        
+        if self.api_key:
+            params['api_key'] = self.api_key
+        
         try:
-            fetch_url = f"{self.base_url}/efetch.fcgi"
-            params = {
-                'db': 'pubmed',
-                'id': pubmed_id,
-                'retmode': 'xml'
-            }
-            
-            if self.api_key:
-                params['api_key'] = self.api_key
-            
-            response = requests.get(fetch_url, params=params)
+            response = requests.get(fetch_url, params=params, timeout=30)
             response.raise_for_status()
             
-            # Parse XML response
-            root = ET.fromstring(response.content)
-            article = root.find('.//PubmedArticle')
+            # Parse all articles at once
+            return self._parse_batch_response(response.content)
             
-            if article is None:
+        except Exception as e:
+            print(f"Error in batch fetch: {e}")
+            return []
+    
+    def _parse_batch_response(self, xml_content: bytes) -> List[Dict]:
+        """Parse multiple articles from XML response"""
+        articles = []
+        
+        try:
+            root = ET.fromstring(xml_content)
+            
+            # Find all articles in the response
+            for article in root.findall('.//PubmedArticle'):
+                try:
+                    article_data = self._parse_single_article(article)
+                    if article_data and article_data.get('abstract') and article_data['abstract'].strip():
+                        articles.append(article_data)
+                except Exception as e:
+                    print(f"Error parsing article: {e}")
+                    continue
+                    
+        except Exception as e:
+            print(f"Error parsing XML: {e}")
+        
+        return articles
+    
+    def _parse_single_article(self, article) -> Optional[Dict]:
+        """Parse a single article from XML"""
+        try:
+            medline_citation = article.find('.//MedlineCitation')
+            if medline_citation is None:
                 return None
             
-            # Extract article information
-            medline_citation = article.find('.//MedlineCitation')
-            pubmed_data = article.find('.//PubmedData')
+            # Extract PubMed ID
+            pmid_elem = medline_citation.find('.//PMID')
+            pubmed_id = pmid_elem.text if pmid_elem is not None else ""
             
-            # Title
+            # Extract title
             title_elem = medline_citation.find('.//ArticleTitle')
             title = title_elem.text if title_elem is not None else "No title available"
             
-            # Abstract
+            # Extract abstract
             abstract_elem = medline_citation.find('.//Abstract/AbstractText')
             abstract = abstract_elem.text if abstract_elem is not None else ""
             
-            # Authors
+            # Extract authors
             authors = []
             author_list = medline_citation.find('.//AuthorList')
             if author_list is not None:
@@ -118,11 +150,11 @@ class PubMedService:
                     elif last_name is not None:
                         authors.append(last_name.text)
             
-            # Journal
+            # Extract journal
             journal_elem = medline_citation.find('.//Journal/Title')
             journal = journal_elem.text if journal_elem is not None else ""
             
-            # Publication date
+            # Extract publication date
             pub_date = medline_citation.find('.//PubDate')
             publication_date = ""
             if pub_date is not None:
@@ -137,8 +169,7 @@ class PubMedService:
                         if day is not None:
                             publication_date += f"-{day.text}"
             
-            # Create article data
-            article_data = {
+            return {
                 'pubmed_id': pubmed_id,
                 'title': title,
                 'authors': authors,
@@ -150,10 +181,8 @@ class PubMedService:
                 'therapeutic_area': self._extract_therapeutic_area(title, abstract)
             }
             
-            return article_data
-            
         except Exception as e:
-            print(f"Error fetching article {pubmed_id}: {e}")
+            print(f"Error parsing single article: {e}")
             return None
     
     def _extract_therapeutic_area(self, title: str, abstract: str) -> str:

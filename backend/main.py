@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict
 import uvicorn
 import json
 import os
 from datetime import datetime
+from functools import lru_cache
 
 from database import get_db, engine
 from models import Base
@@ -248,3 +249,8 @@ async def add_message(
 ):
     conversation_service = ConversationService(db)
     return conversation_service.add_message(conversation_id, message) 
+
+@lru_cache(maxsize=100)
+def cached_pubmed_search(therapeutic_area: str, days_back: int):
+    pubmed_service = PubMedService()
+    return pubmed_service.search_articles(therapeutic_area, days_back) 
