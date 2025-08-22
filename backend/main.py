@@ -6,7 +6,7 @@ import uvicorn
 import json
 import os
 from datetime import datetime
-from functools import lru_cache
+# Removed lru_cache import - using smart_cache instead
 
 from database import get_db, engine
 from models import Base
@@ -81,12 +81,149 @@ async def root():
         "version": "1.0.0"
     }
 
-# Cache PubMed searches
-@lru_cache(maxsize=100)
+# Smart caching strategy for medical literature
+from functools import wraps
+import time
+
+def get_cache_duration(days_back: int) -> int:
+    """
+    Determine cache duration based on search recency
+    Fresh medical research needs shorter cache times
+    """
+    if days_back <= 1:      # Last 24 hours - no cache (always fresh)
+        return 0            
+    elif days_back <= 7:    # Last week - short cache
+        return 300          # Cache 5 minutes
+    elif days_back <= 30:   # Last month - medium cache
+        return 900          # Cache 15 minutes
+    else:                   # Older searches - longer cache
+        return 1800         # Cache 30 minutes
+
+def smart_cache():
+    """Time-aware cache decorator for medical literature searches"""
+    def decorator(func):
+        cache = {}
+        cache_time = {}
+        
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # Extract days_back from args (therapeutic_area, days_back)
+            days_back = args[1] if len(args) > 1 else kwargs.get('days_back', 7)
+            cache_duration = get_cache_duration(days_back)
+            
+            # No caching for 24-hour searches - always fresh
+            if cache_duration == 0:
+                print(f"🔴 NO CACHE for 24hr search: {args[0]}")
+                return func(*args, **kwargs)
+            
+            key = str(args) + str(sorted(kwargs.items()))
+            current_time = time.time()
+            
+            # Check if we have a cached result and it's still valid
+            if key in cache and current_time - cache_time[key] < cache_duration:
+                print(f"🟢 Cache HIT for {args[0]} ({days_back}d, {cache_duration}s cache)")
+                return cache[key]
+            
+            # Cache miss or expired - fetch new data
+            print(f"🟡 Cache MISS for {args[0]} ({days_back}d) - fetching from PubMed")
+            result = func(*args, **kwargs)
+            cache[key] = result
+            cache_time[key] = current_time
+            return result
+        
+        return wrapper
+    return decorator
+
+@smart_cache()
 def cached_pubmed_search(therapeutic_area: str, days_back: int):
-    """Cache PubMed searches to avoid repeated slow API calls"""
+    """Smart cached PubMed search with impact factor sorting"""
     pubmed_service = PubMedService()
-    return pubmed_service.search_articles(therapeutic_area, days_back)
+    articles = pubmed_service.search_articles(therapeutic_area, days_back)
+    
+    # Sort by journal impact factor for reliability
+    return sort_by_impact_factor(articles)
+
+def sort_by_impact_factor(articles):
+    """
+    Sort articles by journal impact factor for reliability assessment
+    High-impact journals = more reliable insights
+    """
+    # Journal impact factor database (2023 data)
+    JOURNAL_IMPACT_FACTORS = {
+        # Tier 1: Top medical journals (IF > 50)
+        'nature': 64.8, 'nature medicine': 87.2, 'science': 63.7,
+        'new england journal of medicine': 176.1, 'nejm': 176.1,
+        'lancet': 168.9, 'cell': 64.5, 'jama': 157.3,
+        
+        # Tier 2: High-impact specialty journals (IF 10-50)
+        'nature genetics': 41.3, 'nature biotechnology': 54.9,
+        'cancer cell': 50.3, 'cell metabolism': 31.4,
+        'circulation': 37.8, 'blood': 25.4, 'diabetes': 9.8,
+        'neuron': 16.2, 'immunity': 43.5, 'gastroenterology': 29.4,
+        
+        # Tier 3: Good specialty journals (IF 5-10)
+        'plos medicine': 13.8, 'bmj': 105.7, 'clinical cancer research': 13.8,
+        'journal of clinical investigation': 15.9, 'jci': 15.9,
+        'american journal of gastroenterology': 9.8,
+        'european heart journal': 35.3,
+        
+        # Tier 4: Standard journals (IF 2-5)
+        'plos one': 3.7, 'scientific reports': 4.6,
+        'bmc medicine': 9.3, 'medicine': 1.6,
+        
+        # Default for unknown journals
+        'unknown': 1.0
+    }
+    
+    def get_impact_factor(journal_name):
+        """Get impact factor for a journal (case-insensitive)"""
+        if not journal_name:
+            return 1.0
+        
+        journal_lower = journal_name.lower().strip()
+        
+        # Direct match
+        if journal_lower in JOURNAL_IMPACT_FACTORS:
+            return JOURNAL_IMPACT_FACTORS[journal_lower]
+        
+        # Partial match for journal names with variations
+        for journal_key, impact_factor in JOURNAL_IMPACT_FACTORS.items():
+            if journal_key in journal_lower or journal_lower in journal_key:
+                return impact_factor
+        
+        # Unknown journal - assign low impact factor
+        return 1.0
+    
+    # Add impact factor to each article and sort
+    for article in articles:
+        article['impact_factor'] = get_impact_factor(article.get('journal', ''))
+        article['reliability_tier'] = get_reliability_tier(article['impact_factor'])
+    
+    # Sort by impact factor (descending) then by publication date (newest first)
+    sorted_articles = sorted(articles, 
+                           key=lambda x: (x['impact_factor'], x.get('publication_date', '')), 
+                           reverse=True)
+    
+    print(f"📈 Sorted {len(articles)} articles by impact factor")
+    if articles:
+        top_journal = sorted_articles[0].get('journal', 'Unknown')
+        top_if = sorted_articles[0].get('impact_factor', 0)
+        print(f"🏆 Top journal: {top_journal} (IF: {top_if})")
+    
+    return sorted_articles
+
+def get_reliability_tier(impact_factor):
+    """Classify journal reliability based on impact factor"""
+    if impact_factor >= 50:
+        return 'Tier 1: Highest reliability'
+    elif impact_factor >= 10:
+        return 'Tier 2: High reliability'  
+    elif impact_factor >= 5:
+        return 'Tier 3: Good reliability'
+    elif impact_factor >= 2:
+        return 'Tier 4: Standard reliability'
+    else:
+        return 'Tier 5: Lower reliability'
 
 # Article search endpoints
 @app.post("/articles/search", response_model=List[ArticleResponse])
@@ -139,7 +276,9 @@ async def search_pubmed_only(request: SearchRequest):
                 "journal": article_data['journal'],
                 "therapeutic_area": article_data['therapeutic_area'],
                 "link": article_data['link'],
-                "created_at": None
+                "created_at": None,
+                "impact_factor": article_data.get('impact_factor', 1.0),
+                "reliability_tier": article_data.get('reliability_tier', 'Unknown')
             })
         
         return response_articles

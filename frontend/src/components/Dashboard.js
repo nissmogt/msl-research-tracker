@@ -77,6 +77,8 @@ function Dashboard() {
         
         clearInterval(progressInterval);
         setSearchProgress(100);
+        setArticles(response.data); // Fix: Actually display PubMed results!
+        setSearchStatus('');
       } else {
         setSearchStatus('Searching local database...');
         const response = await axios.post(endpoint, {

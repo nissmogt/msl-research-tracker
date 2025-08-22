@@ -13,11 +13,15 @@ class ArticleBase(BaseModel):
     journal: Optional[str] = None
     therapeutic_area: Optional[str] = None
     link: Optional[str] = None
+    impact_factor: Optional[float] = 1.0
+    reliability_tier: Optional[str] = 'Unknown'
 
 class ArticleResponse(ArticleBase):
     id: int
     created_at: datetime
     authors: List[str]  # Always return as list
+    impact_factor: float = 1.0
+    reliability_tier: str = 'Unknown'
     
     @field_validator('authors', mode='before')
     @classmethod
