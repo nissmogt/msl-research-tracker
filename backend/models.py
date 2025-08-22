@@ -1,7 +1,20 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
+
+class Journal(Base):
+    __tablename__ = "journals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    issn = Column(String, index=True)  # International Standard Serial Number
+    impact_factor = Column(Float)
+    impact_factor_year = Column(Integer)  # Year of the impact factor
+    category = Column(String)  # Medical specialty category
+    publisher = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class TherapeuticArea(Base):
     __tablename__ = "therapeutic_areas"

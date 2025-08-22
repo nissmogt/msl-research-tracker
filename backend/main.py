@@ -25,6 +25,27 @@ from pubmed_service import PubMedService
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Initialize journal data on startup
+try:
+    from journal_service import JournalImpactFactorService
+    from database import SessionLocal
+    
+    # Check if journals table is empty and populate if needed
+    db = SessionLocal()
+    from models import Journal
+    journal_count = db.query(Journal).count()
+    
+    if journal_count == 0:
+        print("📚 Initializing journal impact factor database...")
+        journal_service = JournalImpactFactorService()
+        journal_service.populate_initial_data(db)
+    else:
+        print(f"📚 Journal database already contains {journal_count} journals")
+    
+    db.close()
+except Exception as e:
+    print(f"⚠️  Warning: Could not initialize journal data: {e}")
+
 app = FastAPI(
     title="MSL Research Tracker API",
     description="Medical Science Liaison Research Tracking and Insights Platform",
@@ -140,64 +161,25 @@ def cached_pubmed_search(therapeutic_area: str, days_back: int):
     pubmed_service = PubMedService()
     articles = pubmed_service.search_articles(therapeutic_area, days_back)
     
-    # Sort by journal impact factor for reliability
-    return sort_by_impact_factor(articles)
+    # Note: Impact factor sorting will be done in the endpoint with DB access
+    return articles
 
-def sort_by_impact_factor(articles):
+def sort_by_impact_factor(articles, db: Session):
     """
     Sort articles by journal impact factor for reliability assessment
-    High-impact journals = more reliable insights
+    Uses database-driven lookup with intelligent estimation for inclusivity
     """
-    # Journal impact factor database (2023 data)
-    JOURNAL_IMPACT_FACTORS = {
-        # Tier 1: Top medical journals (IF > 50)
-        'nature': 64.8, 'nature medicine': 87.2, 'science': 63.7,
-        'new england journal of medicine': 176.1, 'nejm': 176.1,
-        'lancet': 168.9, 'cell': 64.5, 'jama': 157.3,
-        
-        # Tier 2: High-impact specialty journals (IF 10-50)
-        'nature genetics': 41.3, 'nature biotechnology': 54.9,
-        'cancer cell': 50.3, 'cell metabolism': 31.4,
-        'circulation': 37.8, 'blood': 25.4, 'diabetes': 9.8,
-        'neuron': 16.2, 'immunity': 43.5, 'gastroenterology': 29.4,
-        
-        # Tier 3: Good specialty journals (IF 5-10)
-        'plos medicine': 13.8, 'bmj': 105.7, 'clinical cancer research': 13.8,
-        'journal of clinical investigation': 15.9, 'jci': 15.9,
-        'american journal of gastroenterology': 9.8,
-        'european heart journal': 35.3,
-        
-        # Tier 4: Standard journals (IF 2-5)
-        'plos one': 3.7, 'scientific reports': 4.6,
-        'bmc medicine': 9.3, 'medicine': 1.6,
-        
-        # Default for unknown journals
-        'unknown': 1.0
-    }
+    from journal_service import JournalImpactFactorService
     
-    def get_impact_factor(journal_name):
-        """Get impact factor for a journal (case-insensitive)"""
-        if not journal_name:
-            return 1.0
-        
-        journal_lower = journal_name.lower().strip()
-        
-        # Direct match
-        if journal_lower in JOURNAL_IMPACT_FACTORS:
-            return JOURNAL_IMPACT_FACTORS[journal_lower]
-        
-        # Partial match for journal names with variations
-        for journal_key, impact_factor in JOURNAL_IMPACT_FACTORS.items():
-            if journal_key in journal_lower or journal_lower in journal_key:
-                return impact_factor
-        
-        # Unknown journal - assign low impact factor
-        return 1.0
+    journal_service = JournalImpactFactorService()
     
-    # Add impact factor to each article and sort
+    # Add impact factor to each article using the service
     for article in articles:
-        article['impact_factor'] = get_impact_factor(article.get('journal', ''))
-        article['reliability_tier'] = get_reliability_tier(article['impact_factor'])
+        journal_name = article.get('journal', '')
+        impact_factor, reliability_tier = journal_service.get_impact_factor(journal_name, db)
+        
+        article['impact_factor'] = impact_factor
+        article['reliability_tier'] = reliability_tier
     
     # Sort by impact factor (descending) then by publication date (newest first)
     sorted_articles = sorted(articles, 
@@ -258,14 +240,18 @@ async def get_recent_articles(
     return articles
 
 @app.post("/articles/search-pubmed")
-async def search_pubmed_only(request: SearchRequest):
-    """Search PubMed with caching for speed"""
+async def search_pubmed_only(request: SearchRequest, db: Session = Depends(get_db)):
+    """Search PubMed with caching and database-driven impact factor sorting"""
     try:
+        # Get articles from PubMed (cached)
         articles = cached_pubmed_search(request.therapeutic_area, request.days_back)
+        
+        # Sort by impact factor using database service
+        sorted_articles = sort_by_impact_factor(articles, db)
         
         # Convert to response format
         response_articles = []
-        for article_data in articles:
+        for article_data in sorted_articles:
             response_articles.append({
                 "id": None,
                 "pubmed_id": article_data['pubmed_id'],
@@ -314,6 +300,20 @@ async def get_therapeutic_areas(
     from models import TherapeuticArea
     areas = db.query(TherapeuticArea).all()
     return [{"id": area.id, "name": area.name, "description": area.description} for area in areas]
+
+@app.post("/admin/init-journals")
+async def initialize_journal_data(
+    db: Session = Depends(get_db)
+):
+    """Initialize journal impact factor database with known high-impact journals"""
+    try:
+        from journal_service import JournalImpactFactorService
+        journal_service = JournalImpactFactorService()
+        journal_service.populate_initial_data(db)
+        
+        return {"message": "Journal impact factor database initialized successfully"}
+    except Exception as e:
+        return {"error": f"Failed to initialize journal database: {str(e)}"}
 
 # AI Insights endpoints
 @app.post("/articles/{pubmed_id}/insights")
