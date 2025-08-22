@@ -2,46 +2,13 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import { ArrowLeft, ExternalLink, Brain, Calendar, User, Loader } from 'lucide-react';
-
-// Impact Factor Badge Component (same as in ArticleList)
-function ImpactFactorBadge({ impactFactor, reliabilityTier }) {
-  const getImpactFactorColor = (impactFactor) => {
-    if (impactFactor >= 50) {
-      return 'bg-blue-700 text-white'; // Tier 1: Royal blue - Highest reliability
-    } else if (impactFactor >= 10) {
-      return 'bg-sky-500 text-white'; // Tier 2: Sky blue - High reliability
-    } else if (impactFactor >= 5) {
-      return 'bg-orange-400 text-white'; // Tier 3: Coral - Good reliability
-    } else if (impactFactor >= 2) {
-      return 'bg-gray-400 text-white'; // Tier 4: Silver - Standard reliability
-    } else {
-      return null; // No color for lower reliability - keep it simple
-    }
-  };
-
-  // Don't show badge for unknown/low impact factor
-  if (!impactFactor || impactFactor < 2) {
-    return null;
-  }
-
-  const colorClass = getImpactFactorColor(impactFactor);
-  if (!colorClass) return null;
-
-  return (
-    <div className="inline-flex items-center space-x-1">
-      <span 
-        className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${colorClass}`}
-        title={reliabilityTier || 'Journal Impact Factor'}
-      >
-        Impact Factor: {impactFactor.toFixed(1)}
-      </span>
-    </div>
-  );
-}
+import ReliabilityBadge from './ReliabilityBadge';
+import ScoringExplanationModal from './ScoringExplanationModal';
 
 function ArticleDetail({ article, onBack }) {
   const [insights, setInsights] = useState(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
+  const [showScoringModal, setShowScoringModal] = useState(false);
 
   const generateInsights = async () => {
     setLoadingInsights(true);
@@ -98,9 +65,14 @@ function ArticleDetail({ article, onBack }) {
                 <div>
                   <span className="font-medium">Journal:</span> {article.journal}
                 </div>
-                <ImpactFactorBadge 
-                  impactFactor={article.impact_factor} 
-                  reliabilityTier={article.reliability_tier}
+                <ReliabilityBadge 
+                  reliability_score={article.reliability_score}
+                  reliability_band={article.reliability_band}
+                  reliability_reasons={article.reliability_reasons}
+                  uncertainty={article.uncertainty}
+                  use_case="Clinical"
+                  compact={false}
+                  onExplainScoring={() => setShowScoringModal(true)}
                 />
               </div>
             )}
@@ -155,15 +127,15 @@ function ArticleDetail({ article, onBack }) {
               <div className="prose prose-sm max-w-none">
                 <ReactMarkdown 
                   components={{
-                    h1: ({node, ...props}) => <h1 className="text-xl font-bold text-gray-900 mb-3" {...props} />,
-                    h2: ({node, ...props}) => <h2 className="text-lg font-semibold text-gray-900 mb-2 mt-4" {...props} />,
-                    h3: ({node, ...props}) => <h3 className="text-base font-medium text-gray-900 mb-2 mt-3" {...props} />,
-                    p: ({node, ...props}) => <p className="mb-3 text-gray-700 leading-relaxed" {...props} />,
-                    ul: ({node, ...props}) => <ul className="list-disc list-inside mb-3 space-y-1" {...props} />,
-                    ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
-                    li: ({node, ...props}) => <li className="text-gray-700" {...props} />,
-                    strong: ({node, ...props}) => <strong className="font-semibold text-gray-900" {...props} />,
-                    em: ({node, ...props}) => <em className="italic text-gray-800" {...props} />,
+                    h1: ({children, ...props}) => <h1 className="text-xl font-bold text-gray-900 mb-3" {...props}>{children}</h1>,
+                    h2: ({children, ...props}) => <h2 className="text-lg font-semibold text-gray-900 mb-2 mt-4" {...props}>{children}</h2>,
+                    h3: ({children, ...props}) => <h3 className="text-base font-medium text-gray-900 mb-2 mt-3" {...props}>{children}</h3>,
+                    p: ({children, ...props}) => <p className="mb-3 text-gray-700 leading-relaxed" {...props}>{children}</p>,
+                    ul: ({children, ...props}) => <ul className="list-disc list-inside mb-3 space-y-1" {...props}>{children}</ul>,
+                    ol: ({children, ...props}) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props}>{children}</ol>,
+                    li: ({children, ...props}) => <li className="text-gray-700" {...props}>{children}</li>,
+                    strong: ({children, ...props}) => <strong className="font-semibold text-gray-900" {...props}>{children}</strong>,
+                    em: ({children, ...props}) => <em className="italic text-gray-800" {...props}>{children}</em>,
                   }}
                 >
                   {insights}
@@ -180,6 +152,11 @@ function ArticleDetail({ article, onBack }) {
           )}
         </div>
       </div>
+      
+      <ScoringExplanationModal 
+        open={showScoringModal}
+        onClose={() => setShowScoringModal(false)}
+      />
     </div>
   );
 }

@@ -1,43 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ExternalLink, Calendar, User, Brain, Save } from 'lucide-react';
-
-// Impact Factor Badge Component
-function ImpactFactorBadge({ impactFactor, reliabilityTier }) {
-  const getImpactFactorColor = (impactFactor) => {
-    if (impactFactor >= 50) {
-      return 'bg-blue-700 text-white'; // Tier 1: Royal blue - Highest reliability
-    } else if (impactFactor >= 10) {
-      return 'bg-sky-500 text-white'; // Tier 2: Sky blue - High reliability
-    } else if (impactFactor >= 5) {
-      return 'bg-orange-400 text-white'; // Tier 3: Coral - Good reliability
-    } else if (impactFactor >= 2) {
-      return 'bg-gray-400 text-white'; // Tier 4: Silver - Standard reliability
-    } else {
-      return null; // No color for lower reliability - keep it simple
-    }
-  };
-
-  // Don't show badge for unknown/low impact factor
-  if (!impactFactor || impactFactor < 2) {
-    return null;
-  }
-
-  const colorClass = getImpactFactorColor(impactFactor);
-  if (!colorClass) return null;
-
-  return (
-    <div className="inline-flex items-center space-x-1">
-      <span 
-        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${colorClass}`}
-        title={reliabilityTier || 'Journal Impact Factor'}
-      >
-        Impact Factor: {impactFactor.toFixed(1)}
-      </span>
-    </div>
-  );
-}
+import ReliabilityBadge from './ReliabilityBadge';
+import ScoringExplanationModal from './ScoringExplanationModal';
 
 function ArticleList({ articles, loading, onArticleSelect, onSaveArticle }) {
+  const [showScoringModal, setShowScoringModal] = useState(false);
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -118,9 +85,14 @@ function ArticleList({ articles, loading, onArticleSelect, onSaveArticle }) {
                   <span className="font-medium">Journal:</span> 
                   <span>{article.journal}</span>
                 </div>
-                <ImpactFactorBadge 
-                  impactFactor={article.impact_factor} 
-                  reliabilityTier={article.reliability_tier}
+                <ReliabilityBadge 
+                  reliability_score={article.reliability_score}
+                  reliability_band={article.reliability_band}
+                  reliability_reasons={article.reliability_reasons}
+                  uncertainty={article.uncertainty}
+                  use_case="Clinical"
+                  compact={true}
+                  onExplainScoring={() => setShowScoringModal(true)}
                 />
               </div>
             )}
@@ -156,6 +128,11 @@ function ArticleList({ articles, loading, onArticleSelect, onSaveArticle }) {
           </div>
         ))}
       </div>
+      
+      <ScoringExplanationModal 
+        open={showScoringModal}
+        onClose={() => setShowScoringModal(false)}
+      />
     </div>
   );
 }
