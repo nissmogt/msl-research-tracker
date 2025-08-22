@@ -3,6 +3,42 @@ import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import { ArrowLeft, ExternalLink, Brain, Calendar, User, Loader } from 'lucide-react';
 
+// Impact Factor Badge Component (same as in ArticleList)
+function ImpactFactorBadge({ impactFactor, reliabilityTier }) {
+  const getImpactFactorColor = (impactFactor) => {
+    if (impactFactor >= 50) {
+      return 'bg-blue-700 text-white'; // Tier 1: Royal blue - Highest reliability
+    } else if (impactFactor >= 10) {
+      return 'bg-sky-500 text-white'; // Tier 2: Sky blue - High reliability
+    } else if (impactFactor >= 5) {
+      return 'bg-orange-400 text-white'; // Tier 3: Coral - Good reliability
+    } else if (impactFactor >= 2) {
+      return 'bg-gray-400 text-white'; // Tier 4: Silver - Standard reliability
+    } else {
+      return null; // No color for lower reliability - keep it simple
+    }
+  };
+
+  // Don't show badge for unknown/low impact factor
+  if (!impactFactor || impactFactor < 2) {
+    return null;
+  }
+
+  const colorClass = getImpactFactorColor(impactFactor);
+  if (!colorClass) return null;
+
+  return (
+    <div className="inline-flex items-center space-x-1">
+      <span 
+        className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${colorClass}`}
+        title={reliabilityTier || 'Journal Impact Factor'}
+      >
+        Impact Factor: {impactFactor.toFixed(1)}
+      </span>
+    </div>
+  );
+}
+
 function ArticleDetail({ article, onBack }) {
   const [insights, setInsights] = useState(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
@@ -58,8 +94,14 @@ function ArticleDetail({ article, onBack }) {
             </div>
             
             {article.journal && (
-              <div className="text-sm text-gray-600 mb-4">
-                <span className="font-medium">Journal:</span> {article.journal}
+              <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
+                <div>
+                  <span className="font-medium">Journal:</span> {article.journal}
+                </div>
+                <ImpactFactorBadge 
+                  impactFactor={article.impact_factor} 
+                  reliabilityTier={article.reliability_tier}
+                />
               </div>
             )}
             

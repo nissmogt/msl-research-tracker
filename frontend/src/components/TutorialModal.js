@@ -14,6 +14,10 @@ const steps = [
     content: `Toggle between "Local Database" and "PubMed Search" to find saved or new articles.`,
   },
   {
+    title: 'Journal Impact Factor Tiers',
+    content: `Articles are automatically sorted by journal reliability using color-coded Impact Factor badges:\n\n🔵 Royal Blue (IF ≥50): Tier 1 - Highest reliability (Nature, NEJM, Lancet)\n🔵 Sky Blue (IF 10-49): Tier 2 - High reliability (Circulation, Blood)\n🟠 Coral (IF 5-9): Tier 3 - Good reliability (PLOS Medicine, BMJ)\n⚪ Silver (IF 2-4): Tier 4 - Standard reliability (PLOS ONE)\n\nArticles with Impact Factor below 2 show no badge to keep the interface clean.`,
+  },
+  {
     title: 'Article Details',
     content: `Click an article to view details, open it in PubMed, or generate AI insights.`,
   },

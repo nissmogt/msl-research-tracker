@@ -15,12 +15,13 @@ from schemas import (
     ConversationCreate, ConversationResponse,
     MessageCreate, MessageResponse,
     InsightRequest,
-    FetchPubmedRequest
-)
-from services import (
+    FetchPubmedRequest,
+    ReliabilityRequest, ReliabilityResponse
+)from services import (
     ArticleService, ConversationService, AIService
 )
 from pubmed_service import PubMedService
+from reliability_meter import ReliabilityMeter, UseCase as ReliabilityUseCase
 
 # Create database tables
 Base.metadata.create_all(bind=engine)

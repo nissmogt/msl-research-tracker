@@ -22,7 +22,12 @@ class ArticleResponse(ArticleBase):
     authors: List[str]  # Always return as list
     impact_factor: float = 1.0
     reliability_tier: str = 'Unknown'
-    
+    # New reliability meter fields
+    reliability_score: Optional[float] = None
+    reliability_band: Optional[str] = None
+    reliability_reasons: Optional[List[str]] = None
+    uncertainty: Optional[str] = None
+    use_case: Optional[str] = "clinical"    
     @field_validator('authors', mode='before')
     @classmethod
     def parse_authors(cls, v):
@@ -87,3 +92,28 @@ class MessageResponse(MessageBase):
 class FetchPubmedRequest(BaseModel):
     therapeutic_area: str
     days_back: int = 7 
+# Reliability Meter schemas
+class ReliabilityComponents(BaseModel):
+    authority_ta: float
+    relevance_ta: float
+    freshness_ta: float
+    guideline: float
+    rigor: float
+
+class ReliabilityResponse(BaseModel):
+    journal_name: str
+    therapeutic_area: str
+    use_case: str  # "clinical" or "exploratory"
+    score: float
+    band: str  # "high", "moderate", "exploratory", "low"
+    components: ReliabilityComponents
+    uncertainty: str  # "low", "medium", "high"
+    reasons: List[str]
+    impact_factor: float
+    updated_at: str
+
+class UseCase(BaseModel):
+    name: str  # "clinical" or "exploratory"
+    
+class ReliabilityRequest(BaseModel):
+    use_case: str = "clinical"  # Default to clinical use case
