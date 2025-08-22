@@ -49,7 +49,8 @@ async def health_check():
     try:
         # Test database connection
         db = next(get_db())
-        result = db.execute("SELECT 1").fetchone()
+        from sqlalchemy import text
+        result = db.execute(text("SELECT 1")).fetchone()
         db.close()
         
         return {
@@ -57,7 +58,9 @@ async def health_check():
             "database": "connected",
             "timestamp": datetime.now().isoformat(),
             "port": os.environ.get("PORT", "unknown"),
-            "database_url": "configured" if os.environ.get("DATABASE_URL") else "missing"
+            "database_url": "configured" if os.environ.get("DATABASE_URL") else "missing",
+            "openai_api": "configured" if os.environ.get("OPENAI_API_KEY") else "missing",
+            "secret_key": "configured" if os.environ.get("SECRET_KEY") else "generated"
         }
     except Exception as e:
         return {
@@ -65,7 +68,9 @@ async def health_check():
             "database": f"error: {str(e)}",
             "timestamp": datetime.now().isoformat(),
             "port": os.environ.get("PORT", "unknown"),
-            "database_url": "configured" if os.environ.get("DATABASE_URL") else "missing"
+            "database_url": "configured" if os.environ.get("DATABASE_URL") else "missing",
+            "openai_api": "configured" if os.environ.get("OPENAI_API_KEY") else "missing",
+            "secret_key": "configured" if os.environ.get("SECRET_KEY") else "generated"
         }
 
 @app.get("/")
