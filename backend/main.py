@@ -243,35 +243,81 @@ async def get_recent_articles(
 
 @app.post("/articles/search-pubmed")
 async def search_pubmed_only(request: SearchRequest, db: Session = Depends(get_db)):
-    """Search PubMed with caching and database-driven impact factor sorting"""
+    """Search PubMed with caching and TA-aware reliability scoring"""
     try:
-        # Get articles from PubMed (cached)
         articles = cached_pubmed_search(request.therapeutic_area, request.days_back)
         
-        # Sort by impact factor using database service
-        sorted_articles = sort_by_impact_factor(articles, db)
+        # Initialize ReliabilityMeter
+        reliability_meter = ReliabilityMeter()
         
-        # Convert to response format
         response_articles = []
-        for article_data in sorted_articles:
-            response_articles.append({
-                "id": None,
-                "pubmed_id": article_data['pubmed_id'],
-                "title": article_data['title'],
-                "authors": article_data['authors'],
-                "abstract": article_data['abstract'],
-                "publication_date": article_data['publication_date'],
-                "journal": article_data['journal'],
-                "therapeutic_area": article_data['therapeutic_area'],
-                "link": article_data['link'],
-                "created_at": None,
-                "impact_factor": article_data.get('impact_factor', 1.0),
-                "reliability_tier": article_data.get('reliability_tier', 'Unknown')
-            })
+        for article_data in articles:
+            # Get traditional IF (your current system)
+            from journal_service import JournalImpactFactorService
+            journal_service = JournalImpactFactorService()
+            impact_factor, _ = journal_service.get_impact_factor(article_data['journal'], db)
+            
+            # NEW: Get TA-aware reliability score
+            try:
+                reliability = reliability_meter.assess_reliability(
+                    journal_name=article_data['journal'],
+                    therapeutic_area=request.therapeutic_area,
+                    use_case=ReliabilityUseCase.CLINICAL, # Default to Clinical, could be user-selectable
+                    db=db,
+                    impact_factor=impact_factor
+                )
+                print(f"✅ Reliability calculated for {article_data['journal']}: {reliability.score}")
+            except Exception as e:
+                print(f"❌ Error calculating reliability for {article_data['journal']}: {e}")
+                # Fallback to basic data
+                reliability = None
+            
+            if reliability:
+                response_articles.append({
+                    "id": None,
+                    "pubmed_id": article_data['pubmed_id'],
+                    "title": article_data['title'],
+                    "authors": article_data['authors'],
+                    "abstract": article_data['abstract'],
+                    "publication_date": article_data['publication_date'],
+                    "journal": article_data['journal'],
+                    "therapeutic_area": article_data['therapeutic_area'],
+                    "link": article_data['link'],
+                    "created_at": None,
+                    "impact_factor": impact_factor,
+                    "reliability_tier": reliability.band.value, # Use the band from ReliabilityMeter
+                    "reliability_score": reliability.score,
+                    "reliability_band": reliability.band.value,
+                    "reliability_reasons": reliability.reasons,
+                    "uncertainty": reliability.uncertainty
+                })
+            else:
+                # Fallback without reliability data
+                response_articles.append({
+                    "id": None,
+                    "pubmed_id": article_data['pubmed_id'],
+                    "title": article_data['title'],
+                    "authors": article_data['authors'],
+                    "abstract": article_data['abstract'],
+                    "publication_date": article_data['publication_date'],
+                    "journal": article_data['journal'],
+                    "therapeutic_area": article_data['therapeutic_area'],
+                    "link": article_data['link'],
+                    "created_at": None,
+                    "impact_factor": impact_factor,
+                    "reliability_tier": get_reliability_tier(impact_factor),
+                    "reliability_score": None,
+                    "reliability_band": None,
+                    "reliability_reasons": None,
+                    "uncertainty": None
+                })
         
-        return response_articles
+        # Sort by reliability score (descending), handling None values
+        sorted_articles = sorted(response_articles, key=lambda x: x['reliability_score'] or 0, reverse=True)
+        
+        return sorted_articles
     except Exception as e:
-        print(f"Error in cached search: {e}")
+        print(f"Error in PubMed search with reliability: {e}")
         return []
 
 @app.post("/articles/fetch-pubmed")
