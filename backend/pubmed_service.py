@@ -17,24 +17,39 @@ class PubMedService:
     def __init__(self):
         self.base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
         self.api_key = None
-        self.delay = 0.1  # Much faster
-        self.max_results = 30
-        self.batch_size = 10  # Process 10 articles at once
+        self.delay = 0.1
+        self.max_results = 10  # Reduce from 30 to 10
+        self.batch_size = 10
     
     def search_articles(self, therapeutic_area: str, days_back: int = 7) -> List[Dict]:
         """Search PubMed for articles - FAST VERSION"""
+        start_time = time.time()
+        print(f"🔍 Starting PubMed search for '{therapeutic_area}'...")
+        
         try:
-            # Step 1: Get article IDs (same as before)
+            # Step 1: Get article IDs
+            ids_start = time.time()
             article_ids = self._get_article_ids(therapeutic_area, days_back)
+            ids_time = time.time() - ids_start
+            print(f"⏱️ Got {len(article_ids)} article IDs in {ids_time:.2f}s")
+            
             if not article_ids:
+                print("❌ No articles found")
                 return []
             
-            # Step 2: Batch fetch article details (PARALLEL!)
+            # Step 2: Batch fetch article details
+            fetch_start = time.time()
             articles = self._batch_fetch_articles(article_ids)
+            fetch_time = time.time() - fetch_start
+            print(f"⏱️ Fetched {len(articles)} article details in {fetch_time:.2f}s")
+            
+            total_time = time.time() - start_time
+            print(f"✅ Total search time: {total_time:.2f}s")
             return articles
             
         except Exception as e:
-            print(f"Error searching PubMed: {e}")
+            total_time = time.time() - start_time
+            print(f"❌ Error after {total_time:.2f}s: {e}")
             return []
     
     def _get_article_ids(self, therapeutic_area: str, days_back: int) -> List[str]:

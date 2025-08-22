@@ -21,6 +21,7 @@ function Dashboard() {
     return localStorage.getItem('msl_tutorial_complete') !== 'true';
   });
   const [searchStatus, setSearchStatus] = useState('');
+  const [searchProgress, setSearchProgress] = useState(0);
 
   // Therapeutic areas for demo
   const therapeuticAreas = [
@@ -53,23 +54,38 @@ function Dashboard() {
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
     setLoading(true);
-    setSearchStatus('Searching local database...');
+    setSearchProgress(0);
     
     try {
       const endpoint = searchMode === 'pubmed' ? '/articles/search-pubmed' : '/articles/search';
       
       if (searchMode === 'pubmed') {
-        setSearchStatus('Searching PubMed (this may take 30+ seconds)...');
+        setSearchStatus('Searching PubMed (this may take 15+ seconds)...');
+        
+        // Show progress animation
+        const progressInterval = setInterval(() => {
+          setSearchProgress(prev => {
+            if (prev >= 90) return prev;
+            return prev + Math.random() * 10;
+          });
+        }, 500);
+        
+        const response = await axios.post(endpoint, {
+          therapeutic_area: searchTerm,
+          days_back: daysBack
+        });
+        
+        clearInterval(progressInterval);
+        setSearchProgress(100);
       } else {
-        setSearchStatus('Searching local database and PubMed if needed...');
+        setSearchStatus('Searching local database...');
+        const response = await axios.post(endpoint, {
+          therapeutic_area: searchTerm,
+          days_back: daysBack
+        });
+        setArticles(response.data);
+        setSearchStatus('');
       }
-      
-      const response = await axios.post(endpoint, {
-        therapeutic_area: searchTerm,
-        days_back: daysBack
-      });
-      setArticles(response.data);
-      setSearchStatus('');
     } catch (error) {
       console.error('[Dashboard] Error searching articles:', error);
       setSearchStatus('Search failed');
