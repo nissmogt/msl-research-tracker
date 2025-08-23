@@ -28,4 +28,9 @@ frontend/.pnp.loader.js
 .idea/
 
 # OS
-.DS_Store 
+.DS_Store # Development environment files
+frontend/.env.development
+backend/.env.development
+backend/dev_msl_research.db
+backend/*_BACKUP.db
+*.backup

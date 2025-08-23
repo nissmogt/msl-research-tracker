@@ -3,7 +3,7 @@ import { ExternalLink, Calendar, User, Brain, Save } from 'lucide-react';
 import ReliabilityBadge from './ReliabilityBadge';
 import ScoringExplanationModal from './ScoringExplanationModal';
 
-function ArticleList({ articles, loading, onArticleSelect, onSaveArticle }) {
+function ArticleList({ articles, loading, onArticleSelect, onSaveArticle, useCase }) {
   const [showScoringModal, setShowScoringModal] = useState(false);
   if (loading) {
     return (
@@ -90,7 +90,7 @@ function ArticleList({ articles, loading, onArticleSelect, onSaveArticle }) {
                   reliability_band={article.reliability_band}
                   reliability_reasons={article.reliability_reasons}
                   uncertainty={article.uncertainty}
-                  use_case="Clinical"
+                  use_case={useCase || "Clinical"}
                   compact={true}
                   onExplainScoring={() => setShowScoringModal(true)}
                 />

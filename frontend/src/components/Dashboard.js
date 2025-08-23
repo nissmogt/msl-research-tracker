@@ -22,16 +22,8 @@ function Dashboard() {
   });
   const [searchStatus, setSearchStatus] = useState('');
   const [searchProgress, setSearchProgress] = useState(0);
-
-  // Therapeutic areas for demo
-  const therapeuticAreas = [
-    'Oncology',
-    'Cardiovascular',
-    'Neurology',
-    'Immunology',
-    'Rare Diseases',
-    'Infectious Diseases'
-  ];
+  const [useCase, setUseCase] = useState('clinical'); // 'clinical' or 'exploratory'
+  const [error, setError] = useState(''); // Error state for user feedback
 
   useEffect(() => {
     loadRecentArticles();
@@ -40,6 +32,7 @@ function Dashboard() {
 
   const loadRecentArticles = async () => {
     setLoading(true);
+    setError(''); // Clear error on new load
     try {
       const response = await axios.get('/articles/recent', {
         params: { days_back: daysBack }
@@ -47,6 +40,7 @@ function Dashboard() {
       setArticles(response.data);
     } catch (error) {
       console.error('[Dashboard] Error loading articles:', error);
+      setError('Failed to load recent articles. Please check your connection and try again.');
     }
     setLoading(false);
   };
@@ -55,6 +49,7 @@ function Dashboard() {
     if (!searchTerm.trim()) return;
     setLoading(true);
     setSearchProgress(0);
+    setError(''); // Clear error on new search
     
     try {
       const endpoint = searchMode === 'pubmed' ? '/articles/search-pubmed' : '/articles/search';
@@ -72,27 +67,31 @@ function Dashboard() {
         
         const response = await axios.post(endpoint, {
           therapeutic_area: searchTerm,
-          days_back: daysBack
+          days_back: daysBack,
+          use_case: useCase
         });
         
         clearInterval(progressInterval);
         setSearchProgress(100);
-        setArticles(response.data); // Fix: Actually display PubMed results!
+        setArticles(response.data);
         setSearchStatus('');
       } else {
         setSearchStatus('Searching local database...');
         const response = await axios.post(endpoint, {
           therapeutic_area: searchTerm,
-          days_back: daysBack
+          days_back: daysBack,
+          use_case: useCase
         });
         setArticles(response.data);
         setSearchStatus('');
       }
     } catch (error) {
       console.error('[Dashboard] Error searching articles:', error);
-      setSearchStatus('Search failed');
+      setError(`Search failed: ${error.response?.data?.detail || error.message || 'Unknown error'}. Please try again.`);
+      setSearchStatus('');
     }
     setLoading(false);
+    setSearchProgress(0);
   };
 
   const handleSaveArticle = async (article) => {
@@ -114,6 +113,37 @@ function Dashboard() {
 
   const handleTutorialOpen = () => {
     setShowTutorial(true);
+  };
+
+
+  const handleUseCaseToggle = async (newUseCase) => {
+    console.log(`🎯 Toggle clicked: ${newUseCase}`);
+    setUseCase(newUseCase);
+    
+    // Re-search if we have articles and a search term, regardless of search mode
+    if (articles.length > 0 && searchTerm) {
+      setLoading(true);
+      setArticles([]); // Clear articles first
+      setError('');
+      
+      try {
+        console.log(`🔄 Re-searching with use case: ${newUseCase}`);
+        const endpoint = searchMode === 'pubmed' ? '/articles/search-pubmed' : '/articles/search';
+        const response = await axios.post(endpoint, {
+          therapeutic_area: searchTerm,
+          days_back: daysBack,
+          use_case: newUseCase
+        });
+        
+        // Force a complete re-render by creating a new array
+        setArticles([...response.data]);
+        console.log(`✅ Updated with ${response.data.length} articles for ${newUseCase} use case`);
+      } catch (error) {
+        console.error('Error re-ranking articles:', error);
+        setError(`Failed to update articles for ${newUseCase} use case. Please try searching again.`);
+      }
+      setLoading(false);
+    }
   };
 
   return (
@@ -175,46 +205,113 @@ function Dashboard() {
               </button>
             </div>
           </div>
-          {/* Search Mode Toggle */}
-          <div className="mt-3 flex items-center gap-4">
-            <div className="flex items-center space-x-4">
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="searchMode"
-                  value="local"
-                  checked={searchMode === 'local'}
-                  onChange={(e) => setSearchMode(e.target.value)}
-                  className="mr-2"
-                />
-                <span className="text-sm text-gray-700 flex items-center">
-                  <Database className="h-4 w-4 mr-1" />
-                  Local Database
-                </span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="searchMode"
-                  value="pubmed"
-                  checked={searchMode === 'pubmed'}
-                  onChange={(e) => setSearchMode(e.target.value)}
-                  className="mr-2"
-                />
-                <span className="text-sm text-gray-700 flex items-center">
-                  <Globe className="h-4 w-4 mr-1" />
-                  PubMed Search
-                </span>
-              </label>
+          {/* Conditional toggles - only show when not viewing article detail */}
+          {!selectedArticle && (
+            <div className="mt-3 flex items-center space-x-4">
+              <span className="text-sm font-medium text-gray-700">Use Case:</span>
+              <div className="flex bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => handleUseCaseToggle('clinical')}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                    useCase === 'clinical'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Clinical
+                </button>
+                <button
+                  onClick={() => handleUseCaseToggle('exploratory')}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                    useCase === 'exploratory'
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Exploratory
+                </button>
+              </div>
             </div>
-          </div>
+          )}
+          {/* Search Mode Toggle */}
+          {!selectedArticle && (
+            <div className="mt-3 flex items-center gap-4">
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="searchMode"
+                    value="local"
+                    checked={searchMode === 'local'}
+                    onChange={(e) => setSearchMode(e.target.value)}
+                    className="mr-2"
+                  />
+                  <span className="text-sm text-gray-700 flex items-center">
+                    <Database className="h-4 w-4 mr-1" />
+                    Local Database
+                  </span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="searchMode"
+                    value="pubmed"
+                    checked={searchMode === 'pubmed'}
+                    onChange={(e) => setSearchMode(e.target.value)}
+                    className="mr-2"
+                  />
+                  <span className="text-sm text-gray-700 flex items-center">
+                    <Globe className="h-4 w-4 mr-1" />
+                    PubMed Search
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
         </div>
         {/* Content Area */}
         <div className="flex-1 min-h-0 overflow-y-auto">
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-4 m-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+                <div className="ml-auto pl-3">
+                  <button
+                    onClick={() => setError('')}
+                    className="text-red-400 hover:text-red-600"
+                  >
+                    <span className="sr-only">Dismiss</span>
+                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {loading && (
-            <div className="text-center p-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
-              <p className="text-sm text-gray-600">{searchStatus}</p>
+            <div className="text-center p-6">
+              <p className="text-sm text-gray-600 mb-4">{searchStatus}</p>
+              {searchMode === 'pubmed' && searchProgress > 0 ? (
+                <div className="w-full max-w-md mx-auto">
+                  <div className="bg-gray-200 rounded-full h-3">
+                    <div 
+                      className="bg-primary-600 h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${searchProgress}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-sm text-gray-700 mt-2 font-medium">{Math.round(searchProgress)}% complete</p>
+                </div>
+              ) : (
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              )}
             </div>
           )}
           {selectedArticle ? (
@@ -225,9 +322,10 @@ function Dashboard() {
           ) : (
             <ArticleList 
               articles={articles}
-              loading={loading}
+              loading={false} // Set to false to prevent duplicate spinners
               onArticleSelect={setSelectedArticle}
               onSaveArticle={handleSaveArticle}
+              useCase={useCase} // Pass dynamic useCase
             />
           )}
         </div>

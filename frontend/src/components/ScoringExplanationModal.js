@@ -22,11 +22,11 @@ function ScoringExplanationModal({ open, onClose }) {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
             <div className="flex items-center space-x-2 mb-3">
               <Award className="h-6 w-6 text-blue-600" />
-              <h3 className="text-xl font-bold text-blue-900">Revolutionary Breakthrough</h3>
+              <h3 className="text-xl font-bold text-blue-900">Therapeutic Area-Aware Impact Factor</h3>
             </div>
             <p className="text-blue-800 mb-3">
               Our TA-aware system solves the "Journal of Clinical Oncology vs Nature in Oncology" problem by recognizing that 
-              <strong> specialized journals should rank higher in their domains</strong>.
+              <strong> specialized journals may rank lower in their domains</strong>.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-white rounded p-4 border border-blue-200">
@@ -191,7 +191,7 @@ function ScoringExplanationModal({ open, onClose }) {
                     <span className="text-gray-500">({example.useCase})</span>
                   </div>
                   <div className="flex items-center space-x-3">
-                    <span className="font-bold text-blue-600">{example.score}</span>
+                    <span className="font-bold text-blue-600">Reliability Score: {example.score}</span>
                     <span className={`px-2 py-1 rounded text-xs text-white ${example.color}`}>
                       {example.band}
                     </span>
@@ -205,7 +205,7 @@ function ScoringExplanationModal({ open, onClose }) {
           {/* Footer */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
             <p className="text-blue-800 text-sm">
-              This represents a paradigm shift from simple impact factors to sophisticated, 
+              This represents a shift from simple impact factors towards a sophisticated, 
               context-aware reliability assessment that aims to serve MSLs better.
             </p>
           </div>

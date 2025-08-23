@@ -54,6 +54,7 @@ class ArticleResponse(ArticleBase):
 class SearchRequest(BaseModel):
     therapeutic_area: str
     days_back: int = 7
+    use_case: str = "clinical"
 
 class InsightRequest(BaseModel):
     pass  # No additional fields needed for now

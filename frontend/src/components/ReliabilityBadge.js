@@ -96,7 +96,7 @@ function ReliabilityBadge({
       
       {uncertainty && (
         <div className="text-xs text-gray-500">
-          {use_case} • {uncertainty} confidence
+          {use_case?.charAt(0).toUpperCase() + use_case?.slice(1)} • {uncertainty} confidence
         </div>
       )}
     </div>

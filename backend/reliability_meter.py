@@ -80,8 +80,7 @@ class ReliabilityMeter:
                 'gamma': 0.25,   # Freshness: High weight (latest research)
                 'delta': 0.05,   # Guideline: Low weight (not yet in guidelines)
                 'epsilon': 0.10  # Rigor: Moderate weight
-            }
-        }
+            }        }
         
         # Trusted publishers for cold-start boost
         self.trusted_entities = {
@@ -208,7 +207,7 @@ class ReliabilityMeter:
         """
         CRITICAL FUNCTION: How specialized is this journal for the TA?
         
-        This is what makes JCO rank higher than Nature for oncology!
+        This is what makes JCO rank higher than Nature for oncology.
         """
         name = journal_name.lower()
         ta_lower = ta.lower()
