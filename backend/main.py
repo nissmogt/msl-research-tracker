@@ -72,6 +72,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+async def root():
+    """Root endpoint for Railway health checks"""
+    return {"status": "MSL Research Tracker API is running", "version": "1.0.0"}
+
 @app.get("/health")
 async def health_check():
     try:
