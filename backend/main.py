@@ -23,6 +23,7 @@ from services import (
 )
 from pubmed_service import PubMedService
 from reliability_meter import ReliabilityMeter, UseCase as ReliabilityUseCase
+from middleware.auth_edge import EdgeAuthMiddleware
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -54,13 +55,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware for React frontend
+# Add Edge Authentication middleware to validate X-Edge-Auth header
+app.add_middleware(EdgeAuthMiddleware)
+
+# CORS middleware for React frontend - now restricted to insightmsl.com
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://msl-research-tracker.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:3001"
+        "https://insightmsl.com",
+        "https://www.insightmsl.com",
+        "http://localhost:3000",  # Keep for local development
+        "http://localhost:3001"   # Keep for local development
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
