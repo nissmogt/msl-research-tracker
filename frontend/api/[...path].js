@@ -13,11 +13,22 @@ export default async function handler(req, res) {
 
   // Extract the path from the query parameters
   const { path = [] } = req.query;
-  const targetPath = Array.isArray(path) ? path.join('/') : String(path);
+  let targetPath = '';
   
-  // Build the destination URL
+  if (Array.isArray(path) && path.length > 0) {
+    targetPath = path.join('/');
+  } else if (typeof path === 'string' && path.length > 0) {
+    targetPath = path;
+  }
+  
+  // Build the destination URL - don't add extra slash if targetPath is empty
   const queryString = req.url?.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-  const destinationUrl = `${BACKEND_BASE}/${targetPath}${queryString}`;
+  const destinationUrl = targetPath 
+    ? `${BACKEND_BASE}/${targetPath}${queryString}`
+    : `${BACKEND_BASE}${queryString}`;
+  
+  // Debug logging
+  console.log(`Proxying: ${req.method} ${req.url} → ${destinationUrl}`);
 
   try {
     // Prepare headers for the upstream request
