@@ -22,7 +22,7 @@ class ArticleResponse(ArticleBase):
     authors: List[str]  # Always return as list
     impact_factor: float = 1.0
     reliability_tier: str = 'Unknown'
-    insights: Optional[str] = None  # Include saved insights
+    # insights: Optional[str] = None  # Include saved insights - temporarily disabled
     # New reliability meter fields
     reliability_score: Optional[float] = None
     reliability_band: Optional[str] = None

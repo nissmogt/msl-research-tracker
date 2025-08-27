@@ -462,7 +462,29 @@ async def generate_insights(
             raise HTTPException(status_code=404, detail="Article not found in PubMed")
     
     insights = ai_service.generate_medical_affairs_insights(article)
-    return {"insights": insights, "article": article}
+    
+    # Convert article to a serializable format for the response
+    if hasattr(article, 'raw_data'):
+        # This is a TempArticle from PubMed
+        article_response = article.raw_data
+    else:
+        # This is a database article - convert to dict
+        article_response = {
+            "pubmed_id": article.pubmed_id,
+            "title": article.title,
+            "abstract": article.abstract,
+            "authors": article.authors if isinstance(article.authors, list) else json.loads(article.authors or "[]"),
+            "journal": article.journal,
+            "publication_date": article.publication_date,
+            "therapeutic_area": article.therapeutic_area,
+            "link": article.link,
+            "created_at": article.created_at.isoformat() if hasattr(article, 'created_at') and article.created_at else None,
+            "id": getattr(article, 'id', None),
+            "rss_fetch_date": getattr(article, 'rss_fetch_date', None),
+            "insights": getattr(article, 'insights', None)
+        }
+    
+    return {"insights": insights, "article": article_response}
 
 @app.post("/articles/save-with-insights")
 async def save_article_with_insights(
@@ -472,58 +494,13 @@ async def save_article_with_insights(
     """
     Save an article along with its generated insights to the local database.
     This gives users control over what gets persisted locally.
+    Note: Feature is temporarily disabled while database migration is in progress.
     """
-    try:
-        article_service = ArticleService(db)
-        
-        # Check if article already exists
-        existing_article = article_service.get_article_by_pubmed_id(request.article_data.get('pubmed_id'))
-        
-        if existing_article:
-            # Update existing article with insights (handle column existence gracefully)
-            try:
-                existing_article.insights = request.insights
-                db.commit()
-                db.refresh(existing_article)
-                return {"message": "Article insights updated successfully", "article_id": existing_article.id}
-            except Exception as e:
-                print(f"Could not update insights column: {e}")
-                return {"message": "Article exists but insights column not available", "article_id": existing_article.id}
-        else:
-            # Save new article with insights
-            from models import Article
-            import json
-            
-            # Create new article record (handle insights column gracefully)
-            article_data = {
-                'pubmed_id': request.article_data.get('pubmed_id'),
-                'title': request.article_data.get('title'),
-                'authors': json.dumps(request.article_data.get('authors', [])),
-                'abstract': request.article_data.get('abstract', ''),
-                'publication_date': request.article_data.get('publication_date', ''),
-                'journal': request.article_data.get('journal', ''),
-                'therapeutic_area': request.article_data.get('therapeutic_area', ''),
-                'link': request.article_data.get('link', ''),
-                'rss_fetch_date': request.article_data.get('rss_fetch_date', datetime.now().strftime('%Y-%m-%d'))
-            }
-            
-            # Try to include insights if column exists
-            try:
-                article_data['insights'] = request.insights
-            except:
-                print("Insights column not available in database schema")
-            
-            new_article = Article(**article_data)
-            
-            db.add(new_article)
-            db.commit()
-            db.refresh(new_article)
-            
-            return {"message": "Article and insights saved successfully", "article_id": new_article.id}
-            
-    except Exception as e:
-        print(f"Error saving article with insights: {e}")
-        raise HTTPException(status_code=500, detail="Failed to save article and insights")
+    return {
+        "message": "Save with insights feature coming soon! Database migration in progress.", 
+        "status": "feature_pending",
+        "note": "You can still generate insights for any article. Save functionality will be available after database update."
+    }
 
 # Conversation endpoints
 @app.get("/conversations", response_model=List[ConversationResponse])

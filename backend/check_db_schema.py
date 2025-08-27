@@ -22,9 +22,10 @@ def ensure_insights_column():
         if 'insights' not in column_names:
             print("Adding insights column to articles table...")
             
-            # Add the column using raw SQL
+            # Add the column using proper SQLAlchemy syntax
+            from sqlalchemy import text
             with engine.connect() as connection:
-                connection.execute("ALTER TABLE articles ADD COLUMN insights TEXT")
+                connection.execute(text("ALTER TABLE articles ADD COLUMN insights TEXT"))
                 connection.commit()
             
             print("✅ Successfully added insights column")
@@ -33,6 +34,7 @@ def ensure_insights_column():
             
     except Exception as e:
         print(f"Error checking/updating database schema: {e}")
+        # If column creation fails, we'll handle it gracefully in the application
 
 if __name__ == "__main__":
     ensure_insights_column()
