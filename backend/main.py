@@ -67,7 +67,16 @@ app = FastAPI(
 # app.add_middleware(RateLimitingMiddleware)
 
 # Add Edge Authentication middleware to validate X-Edge-Auth header
-app.add_middleware(EdgeAuthMiddleware)
+print("🔐 Registering EdgeAuthMiddleware...")
+print(f"🔍 EDGE_SECRET configured: {bool(os.getenv('EDGE_SECRET'))}")
+print(f"🔍 EDGE_SECRET length: {len(os.getenv('EDGE_SECRET', ''))}")
+try:
+    app.add_middleware(EdgeAuthMiddleware)
+    print("✅ EdgeAuthMiddleware registered successfully")
+except Exception as e:
+    print(f"❌ Error registering EdgeAuthMiddleware: {e}")
+    # For debugging - still register middleware even if there are issues
+    app.add_middleware(EdgeAuthMiddleware)
 
 # CORS middleware for React frontend - now restricted to insightmsl.com
 app.add_middleware(
@@ -88,19 +97,7 @@ async def root():
     """Root endpoint for Railway health checks"""
     return {"status": "MSL Research Tracker API is running", "version": "1.0.1"}
 
-@app.get("/debug/edge-auth")
-async def debug_edge_auth():
-    """
-    Debug endpoint to check EdgeAuthMiddleware configuration.
-    """
-    import os
-    edge_secret = os.getenv("EDGE_SECRET")
-    return {
-        "edge_secret_configured": bool(edge_secret),
-        "edge_secret_length": len(edge_secret) if edge_secret else 0,
-        "middleware_imported": True,
-        "debug_timestamp": datetime.now().isoformat()
-    }
+
 
 @app.get("/health")
 async def health_check():
