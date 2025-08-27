@@ -14,7 +14,7 @@ from schemas import (
     ArticleResponse, SearchRequest,
     ConversationCreate, ConversationResponse,
     MessageCreate, MessageResponse,
-    InsightRequest, SaveArticleRequest,
+    InsightRequest,
     FetchPubmedRequest,
     ReliabilityRequest, ReliabilityResponse
 )
@@ -239,61 +239,18 @@ def get_reliability_tier(impact_factor):
         return 'Tier 5: Lower reliability'
 
 # Article search endpoints
-@app.post("/articles/search", response_model=List[ArticleResponse])
-# @search_rate_limit  # Temporarily disabled due to slowapi dependency issue
-async def search_articles(
-    request: SearchRequest,
-    db: Session = Depends(get_db)
-):
-    try:
-        article_service = ArticleService(db)
-        
-        # Search local database only
-        articles = article_service.search_articles(request.therapeutic_area, request.days_back)
-        print(f"🔍 Local search found {len(articles)} articles for '{request.therapeutic_area}'")
-        
-        # Recalculate reliability scores based on use case for local articles
-        if articles and request.use_case:
-            print(f"🔄 Recalculating reliability scores for {len(articles)} local articles with use case: {request.use_case}")
-            reliability_meter = ReliabilityMeter()
-            from journal_service import JournalImpactFactorService
-            journal_service = JournalImpactFactorService()
-            
-            for article in articles:
-                try:
-                    use_case_enum = ReliabilityUseCase.CLINICAL if request.use_case.lower() == "clinical" else ReliabilityUseCase.EXPLORATORY
-                    impact_factor, _ = journal_service.get_impact_factor(article.journal, db)
-                    reliability = reliability_meter.assess_reliability(
-                        journal_name=article.journal,
-                        therapeutic_area=request.therapeutic_area,
-                        use_case=use_case_enum,
-                        db=db,
-                        impact_factor=impact_factor
-                    )
-                    # Update article reliability fields
-                    article.reliability_score = reliability.score
-                    article.reliability_band = reliability.band.value
-                    article.reliability_reasons = reliability.reasons
-                    article.uncertainty = reliability.uncertainty
-                except Exception as e:
-                    print(f"❌ Error recalculating reliability for {article.journal}: {e}")
-                    
-        return articles
-    except Exception as e:
-        print(f"❌ Error in local article search: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Article search failed: {str(e)}")
+# Local database search endpoint temporarily disabled - focusing on PubMed search only
+# @app.post("/articles/search", response_model=List[ArticleResponse])
+# async def search_articles(...):
+#    try:
+#        article_service = ArticleService(db)
+#        # ... (local search implementation commented out)
+#    except Exception as e:
+#        # ... (error handling commented out)
 
-@app.get("/articles/recent", response_model=List[ArticleResponse])
-async def get_recent_articles(
-    therapeutic_area: Optional[str] = None,
-    days_back: int = 7,
-    db: Session = Depends(get_db)
-):
-    article_service = ArticleService(db)
-    articles = article_service.get_recent_articles(therapeutic_area, days_back)
-    return articles
+# Recent articles endpoint temporarily disabled - focusing on search and insights only
+# @app.get("/articles/recent", response_model=List[ArticleResponse])
+# async def get_recent_articles(...): ...
 
 @app.post("/articles/search-pubmed")
 # @pubmed_search_rate_limit  # Temporarily disabled due to slowapi dependency issue
@@ -486,21 +443,7 @@ async def generate_insights(
     
     return {"insights": insights, "article": article_response}
 
-@app.post("/articles/save-with-insights")
-async def save_article_with_insights(
-    request: SaveArticleRequest,
-    db: Session = Depends(get_db)
-):
-    """
-    Save an article along with its generated insights to the local database.
-    This gives users control over what gets persisted locally.
-    Note: Feature is temporarily disabled while database migration is in progress.
-    """
-    return {
-        "message": "Save with insights feature coming soon! Database migration in progress.", 
-        "status": "feature_pending",
-        "note": "You can still generate insights for any article. Save functionality will be available after database update."
-    }
+# Save feature temporarily removed - focusing on search and insights generation only
 
 # Conversation endpoints
 @app.get("/conversations", response_model=List[ConversationResponse])
