@@ -24,9 +24,10 @@ from services import (
 from pubmed_service import PubMedService
 from reliability_meter import ReliabilityMeter, UseCase as ReliabilityUseCase
 from middleware.auth_edge import EdgeAuthMiddleware
-from middleware.rate_limit import RateLimitingMiddleware, limiter, search_rate_limit, pubmed_search_rate_limit, ai_insights_rate_limit
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
+# Rate limiting imports - temporarily disabled until slowapi is installed
+# from middleware.rate_limit import RateLimitingMiddleware, limiter, search_rate_limit, pubmed_search_rate_limit, ai_insights_rate_limit
+# from slowapi import _rate_limit_exceeded_handler
+# from slowapi.errors import RateLimitExceeded
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -58,12 +59,12 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Add rate limiting to the app
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Add rate limiting to the app - temporarily disabled until slowapi is installed
+# app.state.limiter = limiter
+# app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Add Rate Limiting middleware (before auth middleware)
-app.add_middleware(RateLimitingMiddleware)
+# Add Rate Limiting middleware (before auth middleware) - temporarily disabled
+# app.add_middleware(RateLimitingMiddleware)
 
 # Add Edge Authentication middleware to validate X-Edge-Auth header
 app.add_middleware(EdgeAuthMiddleware)
@@ -221,7 +222,7 @@ def get_reliability_tier(impact_factor):
 
 # Article search endpoints
 @app.post("/articles/search", response_model=List[ArticleResponse])
-@search_rate_limit
+# @search_rate_limit  # Temporarily disabled until slowapi is installed
 async def search_articles(
     request: SearchRequest,
     db: Session = Depends(get_db)
@@ -277,7 +278,7 @@ async def get_recent_articles(
     return articles
 
 @app.post("/articles/search-pubmed")
-@pubmed_search_rate_limit
+# @pubmed_search_rate_limit  # Temporarily disabled until slowapi is installed
 async def search_pubmed_only(request: SearchRequest, db: Session = Depends(get_db)):
     """Search PubMed with caching and TA-aware reliability scoring"""
     try:
@@ -401,7 +402,7 @@ async def initialize_journal_data(
 
 # AI Insights endpoints
 @app.post("/articles/{pubmed_id}/insights")
-@ai_insights_rate_limit
+# @ai_insights_rate_limit  # Temporarily disabled until slowapi is installed
 async def generate_insights(
     pubmed_id: str,
     request: InsightRequest,
