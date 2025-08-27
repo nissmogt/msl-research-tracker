@@ -12,12 +12,10 @@ export default async function handler(req, res) {
   }
 
   // Extract the path from the query parameters
-  const { path = [] } = req.query;
+  const { path } = req.query;
   let targetPath = '';
   
-  if (Array.isArray(path) && path.length > 0) {
-    targetPath = path.join('/');
-  } else if (typeof path === 'string' && path.length > 0) {
+  if (typeof path === 'string' && path.length > 0) {
     targetPath = path;
   }
   
