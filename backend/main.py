@@ -425,9 +425,9 @@ async def generate_insights(
     if not article:
         # Try to fetch from PubMed and save
         pubmed_service = PubMedService()
-        article_data = pubmed_service._fetch_article_details(pubmed_id)
-        if article_data:
-            pubmed_service.save_articles_to_db(db, [article_data])
+        article_data_list = pubmed_service._batch_fetch_articles([pubmed_id])
+        if article_data_list and len(article_data_list) > 0:
+            pubmed_service.save_articles_to_db(db, article_data_list)
             article = article_service.get_article_by_pubmed_id(pubmed_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
