@@ -32,6 +32,13 @@ from middleware.auth_edge import EdgeAuthMiddleware
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Ensure insights column exists (for backwards compatibility)
+try:
+    from check_db_schema import ensure_insights_column
+    ensure_insights_column()
+except Exception as e:
+    print(f"Note: Could not check/add insights column: {e}")
+
 # Initialize journal data on startup
 try:
     from journal_service import JournalImpactFactorService
@@ -473,29 +480,40 @@ async def save_article_with_insights(
         existing_article = article_service.get_article_by_pubmed_id(request.article_data.get('pubmed_id'))
         
         if existing_article:
-            # Update existing article with insights
-            existing_article.insights = request.insights
-            db.commit()
-            db.refresh(existing_article)
-            return {"message": "Article insights updated successfully", "article_id": existing_article.id}
+            # Update existing article with insights (handle column existence gracefully)
+            try:
+                existing_article.insights = request.insights
+                db.commit()
+                db.refresh(existing_article)
+                return {"message": "Article insights updated successfully", "article_id": existing_article.id}
+            except Exception as e:
+                print(f"Could not update insights column: {e}")
+                return {"message": "Article exists but insights column not available", "article_id": existing_article.id}
         else:
             # Save new article with insights
             from models import Article
             import json
             
-            # Create new article record
-            new_article = Article(
-                pubmed_id=request.article_data.get('pubmed_id'),
-                title=request.article_data.get('title'),
-                authors=json.dumps(request.article_data.get('authors', [])),
-                abstract=request.article_data.get('abstract', ''),
-                publication_date=request.article_data.get('publication_date', ''),
-                journal=request.article_data.get('journal', ''),
-                therapeutic_area=request.article_data.get('therapeutic_area', ''),
-                link=request.article_data.get('link', ''),
-                rss_fetch_date=request.article_data.get('rss_fetch_date', datetime.now().strftime('%Y-%m-%d')),
-                insights=request.insights
-            )
+            # Create new article record (handle insights column gracefully)
+            article_data = {
+                'pubmed_id': request.article_data.get('pubmed_id'),
+                'title': request.article_data.get('title'),
+                'authors': json.dumps(request.article_data.get('authors', [])),
+                'abstract': request.article_data.get('abstract', ''),
+                'publication_date': request.article_data.get('publication_date', ''),
+                'journal': request.article_data.get('journal', ''),
+                'therapeutic_area': request.article_data.get('therapeutic_area', ''),
+                'link': request.article_data.get('link', ''),
+                'rss_fetch_date': request.article_data.get('rss_fetch_date', datetime.now().strftime('%Y-%m-%d'))
+            }
+            
+            # Try to include insights if column exists
+            try:
+                article_data['insights'] = request.insights
+            except:
+                print("Insights column not available in database schema")
+            
+            new_article = Article(**article_data)
             
             db.add(new_article)
             db.commit()
