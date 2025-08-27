@@ -421,16 +421,37 @@ async def generate_insights(
 ):
     ai_service = AIService()
     article_service = ArticleService(db)
+    
+    # First check if article exists in local database
     article = article_service.get_article_by_pubmed_id(pubmed_id)
+    
     if not article:
-        # Try to fetch from PubMed and save
+        # Fetch from PubMed but DON'T save to database
         pubmed_service = PubMedService()
         article_data_list = pubmed_service._batch_fetch_articles([pubmed_id])
+        
         if article_data_list and len(article_data_list) > 0:
-            pubmed_service.save_articles_to_db(db, article_data_list)
-            article = article_service.get_article_by_pubmed_id(pubmed_id)
-    if not article:
-        raise HTTPException(status_code=404, detail="Article not found")
+            # Convert the raw article data to the format expected by AI service
+            article_data = article_data_list[0]
+            # Create a temporary article-like object for insights generation
+            class TempArticle:
+                def __init__(self, data):
+                    self.pubmed_id = data.get('pubmed_id')
+                    self.title = data.get('title')
+                    self.abstract = data.get('abstract')
+                    self.authors = data.get('authors', [])
+                    self.journal = data.get('journal')
+                    self.publication_date = data.get('publication_date')
+                    self.therapeutic_area = data.get('therapeutic_area')
+                    self.link = data.get('link')
+                    self.impact_factor = data.get('impact_factor', 1.0)
+                    self.reliability_tier = data.get('reliability_tier', 'Unknown')
+                    self.use_case = data.get('use_case', 'clinical')
+            
+            article = TempArticle(article_data)
+        else:
+            raise HTTPException(status_code=404, detail="Article not found in PubMed")
+    
     insights = ai_service.generate_medical_affairs_insights(article)
     return {"insights": insights, "article": article}
 
