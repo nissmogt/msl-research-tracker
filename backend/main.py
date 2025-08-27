@@ -88,6 +88,20 @@ async def root():
     """Root endpoint for Railway health checks"""
     return {"status": "MSL Research Tracker API is running", "version": "1.0.1"}
 
+@app.get("/debug/edge-auth")
+async def debug_edge_auth():
+    """
+    Debug endpoint to check EdgeAuthMiddleware configuration.
+    """
+    import os
+    edge_secret = os.getenv("EDGE_SECRET")
+    return {
+        "edge_secret_configured": bool(edge_secret),
+        "edge_secret_length": len(edge_secret) if edge_secret else 0,
+        "middleware_imported": True,
+        "debug_timestamp": datetime.now().isoformat()
+    }
+
 @app.get("/health")
 async def health_check():
     """

@@ -19,7 +19,7 @@ class EdgeAuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, excluded_paths: list = None):
         super().__init__(app)
         self.edge_secret = os.getenv("EDGE_SECRET")
-        self.excluded_paths = excluded_paths or ["/", "/health", "/docs", "/redoc", "/openapi.json"]
+        self.excluded_paths = excluded_paths or ["/", "/health", "/docs", "/redoc", "/openapi.json", "/debug/edge-auth"]
         
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Skip auth for excluded paths (health checks, docs, etc.)
