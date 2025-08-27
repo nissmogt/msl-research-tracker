@@ -22,6 +22,7 @@ class ArticleResponse(ArticleBase):
     authors: List[str]  # Always return as list
     impact_factor: float = 1.0
     reliability_tier: str = 'Unknown'
+    insights: Optional[str] = None  # Include saved insights
     # New reliability meter fields
     reliability_score: Optional[float] = None
     reliability_band: Optional[str] = None
@@ -58,6 +59,10 @@ class SearchRequest(BaseModel):
 
 class InsightRequest(BaseModel):
     pass  # No additional fields needed for now
+
+class SaveArticleRequest(BaseModel):
+    article_data: dict  # The article data from PubMed or temp object
+    insights: str       # The generated insights to save
 
 # Conversation schemas
 class ConversationBase(BaseModel):

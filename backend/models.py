@@ -38,6 +38,7 @@ class Article(Base):
     therapeutic_area = Column(String)
     link = Column(String)
     rss_fetch_date = Column(String)
+    insights = Column(Text)  # Store the generated insights
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class Conversation(Base):

@@ -14,7 +14,7 @@ from schemas import (
     ArticleResponse, SearchRequest,
     ConversationCreate, ConversationResponse,
     MessageCreate, MessageResponse,
-    InsightRequest,
+    InsightRequest, SaveArticleRequest,
     FetchPubmedRequest,
     ReliabilityRequest, ReliabilityResponse
 )
@@ -447,6 +447,8 @@ async def generate_insights(
                     self.impact_factor = data.get('impact_factor', 1.0)
                     self.reliability_tier = data.get('reliability_tier', 'Unknown')
                     self.use_case = data.get('use_case', 'clinical')
+                    # Store the raw data for potential saving
+                    self.raw_data = data
             
             article = TempArticle(article_data)
         else:
@@ -454,6 +456,56 @@ async def generate_insights(
     
     insights = ai_service.generate_medical_affairs_insights(article)
     return {"insights": insights, "article": article}
+
+@app.post("/articles/save-with-insights")
+async def save_article_with_insights(
+    request: SaveArticleRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Save an article along with its generated insights to the local database.
+    This gives users control over what gets persisted locally.
+    """
+    try:
+        article_service = ArticleService(db)
+        
+        # Check if article already exists
+        existing_article = article_service.get_article_by_pubmed_id(request.article_data.get('pubmed_id'))
+        
+        if existing_article:
+            # Update existing article with insights
+            existing_article.insights = request.insights
+            db.commit()
+            db.refresh(existing_article)
+            return {"message": "Article insights updated successfully", "article_id": existing_article.id}
+        else:
+            # Save new article with insights
+            from models import Article
+            import json
+            
+            # Create new article record
+            new_article = Article(
+                pubmed_id=request.article_data.get('pubmed_id'),
+                title=request.article_data.get('title'),
+                authors=json.dumps(request.article_data.get('authors', [])),
+                abstract=request.article_data.get('abstract', ''),
+                publication_date=request.article_data.get('publication_date', ''),
+                journal=request.article_data.get('journal', ''),
+                therapeutic_area=request.article_data.get('therapeutic_area', ''),
+                link=request.article_data.get('link', ''),
+                rss_fetch_date=request.article_data.get('rss_fetch_date', datetime.now().strftime('%Y-%m-%d')),
+                insights=request.insights
+            )
+            
+            db.add(new_article)
+            db.commit()
+            db.refresh(new_article)
+            
+            return {"message": "Article and insights saved successfully", "article_id": new_article.id}
+            
+    except Exception as e:
+        print(f"Error saving article with insights: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save article and insights")
 
 # Conversation endpoints
 @app.get("/conversations", response_model=List[ConversationResponse])
