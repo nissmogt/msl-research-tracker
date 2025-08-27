@@ -86,7 +86,7 @@ app.add_middleware(
 @app.get("/")
 async def root():
     """Root endpoint for Railway health checks"""
-    return {"status": "MSL Research Tracker API is running", "version": "1.0.0"}
+    return {"status": "MSL Research Tracker API is running", "version": "1.0.1"}
 
 @app.get("/health")
 async def health_check():
