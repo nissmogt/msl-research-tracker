@@ -4,6 +4,10 @@
   "framework": "create-react-app",
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "/api/[...path]"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
