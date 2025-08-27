@@ -21,9 +21,18 @@ class EdgeAuthMiddleware(BaseHTTPMiddleware):
         self.edge_secret = os.getenv("EDGE_SECRET")
         self.excluded_paths = excluded_paths or ["/", "/health", "/docs", "/redoc", "/openapi.json", "/debug/edge-auth"]
         
+        # Force failure if EDGE_SECRET is not set - critical security requirement
+        if not self.edge_secret:
+            print("🚨 CRITICAL SECURITY ERROR: EDGE_SECRET environment variable not set!")
+            print("🚨 EdgeAuthMiddleware will BLOCK ALL requests except excluded paths!")
+            print("🚨 Set EDGE_SECRET on Railway to fix this issue!")
+        else:
+            print(f"✅ EdgeAuthMiddleware initialized with EDGE_SECRET (length: {len(self.edge_secret)})")
+        
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Skip auth for excluded paths (health checks, docs, etc.)
-        if any(request.url.path == path or request.url.path.startswith(path) for path in self.excluded_paths):
+        # Use exact match for "/" to avoid matching all paths
+        if request.url.path in self.excluded_paths:
             return await call_next(request)
             
         # Check if EDGE_SECRET is configured
