@@ -481,7 +481,7 @@ async def generate_insights(
             "created_at": article.created_at.isoformat() if hasattr(article, 'created_at') and article.created_at else None,
             "id": getattr(article, 'id', None),
             "rss_fetch_date": getattr(article, 'rss_fetch_date', None),
-            "insights": getattr(article, 'insights', None)
+            # "insights": getattr(article, 'insights', None)  # Temporarily disabled
         }
     
     return {"insights": insights, "article": article_response}
