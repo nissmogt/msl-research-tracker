@@ -24,6 +24,9 @@ from services import (
 from pubmed_service import PubMedService
 from reliability_meter import ReliabilityMeter, UseCase as ReliabilityUseCase
 from middleware.auth_edge import EdgeAuthMiddleware
+from middleware.rate_limit import RateLimitingMiddleware, limiter, search_rate_limit, pubmed_search_rate_limit, ai_insights_rate_limit
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -55,6 +58,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Add rate limiting to the app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Add Rate Limiting middleware (before auth middleware)
+app.add_middleware(RateLimitingMiddleware)
+
 # Add Edge Authentication middleware to validate X-Edge-Auth header
 app.add_middleware(EdgeAuthMiddleware)
 
@@ -79,6 +89,10 @@ async def root():
 
 @app.get("/health")
 async def health_check():
+    """
+    Secure health check endpoint - only returns essential status information.
+    Does not expose configuration details for security reasons.
+    """
     try:
         # Test database connection
         db = next(get_db())
@@ -90,29 +104,15 @@ async def health_check():
             "status": "healthy",
             "database": "connected",
             "timestamp": datetime.now().isoformat(),
-            "port": os.environ.get("PORT", "unknown"),
-            "database_url": "configured" if os.environ.get("DATABASE_URL") else "missing",
-            "openai_api": "configured" if os.environ.get("OPENAI_API_KEY") else "missing",
-            "secret_key": "configured" if os.environ.get("SECRET_KEY") else "generated"
+            "service": "MSL Research Tracker API"
         }
     except Exception as e:
         return {
-            "status": "unhealthy",
-            "database": f"error: {str(e)}",
+            "status": "unhealthy", 
+            "database": "disconnected",
             "timestamp": datetime.now().isoformat(),
-            "port": os.environ.get("PORT", "unknown"),
-            "database_url": "configured" if os.environ.get("DATABASE_URL") else "missing",
-            "openai_api": "configured" if os.environ.get("OPENAI_API_KEY") else "missing",
-            "secret_key": "configured" if os.environ.get("SECRET_KEY") else "generated"
+            "service": "MSL Research Tracker API"
         }
-
-@app.get("/")
-async def root():
-    return {
-        "message": "MSL Research Tracker API",
-        "status": "running",
-        "version": "1.0.0"
-    }
 
 # Smart caching strategy for medical literature
 from functools import wraps
@@ -221,6 +221,7 @@ def get_reliability_tier(impact_factor):
 
 # Article search endpoints
 @app.post("/articles/search", response_model=List[ArticleResponse])
+@search_rate_limit
 async def search_articles(
     request: SearchRequest,
     db: Session = Depends(get_db)
@@ -276,6 +277,7 @@ async def get_recent_articles(
     return articles
 
 @app.post("/articles/search-pubmed")
+@pubmed_search_rate_limit
 async def search_pubmed_only(request: SearchRequest, db: Session = Depends(get_db)):
     """Search PubMed with caching and TA-aware reliability scoring"""
     try:
@@ -399,6 +401,7 @@ async def initialize_journal_data(
 
 # AI Insights endpoints
 @app.post("/articles/{pubmed_id}/insights")
+@ai_insights_rate_limit
 async def generate_insights(
     pubmed_id: str,
     request: InsightRequest,
