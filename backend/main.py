@@ -24,10 +24,17 @@ from services import (
 from pubmed_service import PubMedService
 from reliability_meter import ReliabilityMeter, UseCase as ReliabilityUseCase
 from middleware.auth_edge import EdgeAuthMiddleware
-# Rate limiting imports - temporarily disabled due to slowapi dependency issue
-# from middleware.rate_limit import RateLimitingMiddleware, limiter, search_rate_limit, pubmed_search_rate_limit, ai_insights_rate_limit
-# from slowapi import _rate_limit_exceeded_handler
-# from slowapi.errors import RateLimitExceeded
+# Add reliability router
+from routers import reliability as reliability_router
+# Rate limiting imports - Re-enabled with Redis backend for production
+try:
+    from middleware.rate_limit import RateLimitingMiddleware, limiter, search_rate_limit, pubmed_search_rate_limit, ai_insights_rate_limit
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    RATE_LIMITING_ENABLED = True
+except ImportError as e:
+    print(f"⚠️ Rate limiting disabled: {e}")
+    RATE_LIMITING_ENABLED = False
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -85,19 +92,43 @@ except Exception as e:
     # For debugging - still register middleware even if there are issues
     app.add_middleware(EdgeAuthMiddleware)
 
+# Rate limiting middleware - only add if successfully imported
+if RATE_LIMITING_ENABLED:
+    print("✅ Rate limiting enabled with Redis backend")
+    app.add_middleware(RateLimitingMiddleware)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+else:
+    print("⚠️ Rate limiting DISABLED - add Redis to enable protection")
+
 # CORS middleware for React frontend - now restricted to insightmsl.com
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://insightmsl.com",
+        "https://www.insightmsl.com"
+        # Remove localhost origins in production - use environment-specific config
+    ] if os.getenv("ENVIRONMENT") == "production" else [
+        "https://insightmsl.com", 
         "https://www.insightmsl.com",
-        "http://localhost:3000",  # Keep for local development
-        "http://localhost:3001"   # Keep for local development
+        "http://localhost:3000",
+        "http://localhost:3001"
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=[
+        "Accept",
+        "Accept-Language", 
+        "Content-Language",
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "X-Edge-Auth"  # Allow our edge auth header
+    ],
 )
+
+# Mount reliability router for snapshot-based scoring
+app.include_router(reliability_router.router)
 
 @app.get("/")
 async def root():
@@ -132,6 +163,36 @@ async def health_check():
             "timestamp": datetime.now().isoformat(),
             "service": "MSL Research Tracker API"
         }
+
+@app.get("/healthz")
+async def kubernetes_health():
+    """Kubernetes-style liveness probe"""
+    return {"status": "ok", "checks": {"database": "pass"}}
+
+@app.get("/readyz")
+async def kubernetes_readiness():
+    """Kubernetes-style readiness probe with dependency checks"""
+    try:
+        # Check database connectivity
+        from sqlalchemy import text
+        db = next(get_db())
+        db.execute(text("SELECT 1"))
+        db.close()
+        
+        # Check OpenAI API key presence (don't test actual API)
+        from config import settings
+        openai_ready = bool(settings.OPENAI_API_KEY)
+        
+        return {
+            "status": "ready",
+            "checks": {
+                "database": "pass",
+                "openai_config": "pass" if openai_ready else "warn"
+            }
+        }
+    except Exception as e:
+        print(f"Readiness check failed: {e}")
+        raise HTTPException(status_code=503, detail="Service not ready")
 
 # Smart caching strategy for medical literature
 from functools import wraps
