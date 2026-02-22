@@ -3,7 +3,7 @@ import { ExternalLink, Calendar, User, Brain, Save } from 'lucide-react';
 import ReliabilityBadge from './ReliabilityBadge';
 import ScoringExplanationModal from './ScoringExplanationModal';
 
-function ArticleList({ articles, loading, onArticleSelect, onSaveArticle, useCase }) {
+function ArticleList({ articles, loading, onArticleSelect, onSaveArticle, useCase, hasSearched = false }) {
   const [showScoringModal, setShowScoringModal] = useState(false);
   if (loading) {
     return (
@@ -17,8 +17,8 @@ function ArticleList({ articles, loading, onArticleSelect, onSaveArticle, useCas
     return (
       <div className="flex flex-col items-center justify-center h-64 text-gray-500">
         <Brain className="h-16 w-16 mb-4" />
-        <h3 className="text-lg font-medium">No articles found</h3>
-        <p className="text-sm">Try adjusting your search criteria or time range.</p>
+        <h3 className="text-lg font-medium">{hasSearched ? 'No articles found' : 'Start with a therapeutic area search'}</h3>
+        <p className="text-sm">{hasSearched ? 'Try adjusting your search criteria or time range.' : 'Type a therapeutic area and press Enter to get ranked results.'}</p>
       </div>
     );
   }

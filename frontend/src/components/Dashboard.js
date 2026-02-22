@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { 
-  Search, 
+import {
+  Search,
   Loader,
-  Database,
-  Globe
+  Globe,
+  Zap
 } from 'lucide-react';
 import ArticleList from './ArticleList';
 import ArticleDetail from './ArticleDetail';
@@ -16,95 +16,144 @@ function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [daysBack, setDaysBack] = useState(7);
   const [loading, setLoading] = useState(false);
-  const [searchMode, setSearchMode] = useState('local'); // 'local' or 'pubmed'
+  const [searchMode, setSearchMode] = useState('pubmed');
   const [showTutorial, setShowTutorial] = useState(() => {
     return localStorage.getItem('msl_tutorial_complete') !== 'true';
   });
   const [searchStatus, setSearchStatus] = useState('');
   const [searchProgress, setSearchProgress] = useState(0);
-  const [useCase, setUseCase] = useState('clinical'); // 'clinical' or 'exploratory'
-  const [error, setError] = useState(''); // Error state for user feedback
+  const [useCase, setUseCase] = useState('clinical');
+  const [error, setError] = useState('');
+  const [hasSearched, setHasSearched] = useState(false);
 
-  useEffect(() => {
-    loadRecentArticles();
-    // eslint-disable-next-line
+  const searchCacheRef = useRef(new Map());
+  const inFlightControllerRef = useRef(null);
+  const progressIntervalRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  const buildSearchKey = useCallback((params) => {
+    return JSON.stringify({
+      therapeutic_area: params.therapeutic_area.trim().toLowerCase(),
+      days_back: params.days_back,
+      use_case: params.use_case,
+      search_mode: params.search_mode,
+    });
   }, []);
 
-  const loadRecentArticles = async () => {
-    setLoading(true);
-    setError(''); // Clear error on new load
-    try {
-      const response = await axios.get('/articles/recent', {
-        params: { days_back: daysBack }
-      });
-      setArticles(response.data);
-    } catch (error) {
-      console.error('[Dashboard] Error loading articles:', error);
-      setError('Failed to load recent articles. Please check your connection and try again.');
+  const clearProgressTimer = useCallback(() => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
     }
-    setLoading(false);
-  };
+  }, []);
 
-  const handleSearch = async () => {
-    if (!searchTerm.trim()) return;
+  useEffect(() => {
+    const handleGlobalShortcut = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalShortcut);
+    return () => window.removeEventListener('keydown', handleGlobalShortcut);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearProgressTimer();
+      inFlightControllerRef.current?.abort();
+    };
+  }, [clearProgressTimer]);
+
+  const runSearch = useCallback(async ({ therapeutic_area, days_back, use_case, search_mode }, { force = false } = {}) => {
+    const normalizedTerm = therapeutic_area.trim();
+    if (!normalizedTerm) return;
+
+    setError('');
+    setSearchStatus('');
+    setHasSearched(true);
+
+    const key = buildSearchKey({ therapeutic_area: normalizedTerm, days_back, use_case, search_mode });
+
+    if (!force && searchCacheRef.current.has(key)) {
+      setArticles(searchCacheRef.current.get(key));
+      setSearchStatus('Loaded from recent search');
+      setTimeout(() => setSearchStatus(''), 1200);
+      return;
+    }
+
+    inFlightControllerRef.current?.abort();
+    clearProgressTimer();
+
+    const controller = new AbortController();
+    inFlightControllerRef.current = controller;
+
     setLoading(true);
     setSearchProgress(0);
-    setError(''); // Clear error on new search
-    
+
     try {
-      const endpoint = searchMode === 'pubmed' ? '/articles/search-pubmed' : '/articles/search';
-      
-      if (searchMode === 'pubmed') {
-        setSearchStatus('Searching PubMed (this may take 15+ seconds)...');
-        
-        // Show progress animation
-        const progressInterval = setInterval(() => {
-          setSearchProgress(prev => {
-            if (prev >= 90) return prev;
-            return prev + Math.random() * 10;
-          });
-        }, 500);
-        
-        const response = await axios.post(endpoint, {
-          therapeutic_area: searchTerm,
-          days_back: daysBack,
-          use_case: useCase
-        });
-        
-        clearInterval(progressInterval);
-        setSearchProgress(100);
-        setArticles(response.data);
-        setSearchStatus('');
+      const endpoint = search_mode === 'pubmed' ? '/articles/search-pubmed' : '/articles/search';
+
+      if (search_mode === 'pubmed') {
+        setSearchStatus('Searching PubMed (usually 10–20s)...');
+        progressIntervalRef.current = setInterval(() => {
+          setSearchProgress((prev) => (prev >= 92 ? prev : prev + Math.random() * 8));
+        }, 450);
       } else {
         setSearchStatus('Searching local database...');
-        const response = await axios.post(endpoint, {
-          therapeutic_area: searchTerm,
-          days_back: daysBack,
-          use_case: useCase
-        });
-        setArticles(response.data);
-        setSearchStatus('');
       }
-    } catch (error) {
-      console.error('[Dashboard] Error searching articles:', error);
-      setError(`Search failed: ${error.response?.data?.detail || error.message || 'Unknown error'}. Please try again.`);
-      setSearchStatus('');
-    }
-    setLoading(false);
-    setSearchProgress(0);
-  };
 
-  const handleSaveArticle = async (article) => {
-    try {
-      await axios.post('/articles/fetch-pubmed', {
-        therapeutic_area: article.therapeutic_area || searchTerm,
-        days_back: daysBack
-      });
-      loadRecentArticles();
-    } catch (error) {
-      console.error('[Dashboard] Error saving article:', error);
+      const response = await axios.post(
+        endpoint,
+        {
+          therapeutic_area: normalizedTerm,
+          days_back,
+          use_case,
+        },
+        { signal: controller.signal }
+      );
+
+      clearProgressTimer();
+      setSearchProgress(100);
+
+      const payload = Array.isArray(response.data) ? response.data : [];
+      searchCacheRef.current.set(key, payload);
+      setArticles(payload);
+      setSelectedArticle(null);
+      setSearchStatus('');
+    } catch (err) {
+      clearProgressTimer();
+
+      if (err?.code === 'ERR_CANCELED' || axios.isCancel?.(err)) {
+        return;
+      }
+
+      if (search_mode === 'local' && err?.response?.status === 404) {
+        setSearchMode('pubmed');
+        setSearchStatus('Local search unavailable. Switching to PubMed...');
+        await runSearch({ therapeutic_area: normalizedTerm, days_back, use_case, search_mode: 'pubmed' }, { force: true });
+        return;
+      }
+
+      console.error('[Dashboard] Error searching articles:', err);
+      setError(`Search failed: ${err.response?.data?.detail || err.message || 'Unknown error'}. Please try again.`);
+      setSearchStatus('');
+    } finally {
+      setLoading(false);
+      setSearchProgress(0);
+      inFlightControllerRef.current = null;
     }
-  };
+  }, [buildSearchKey, clearProgressTimer]);
+
+  const handleSearch = useCallback(() => {
+    runSearch({
+      therapeutic_area: searchTerm,
+      days_back: daysBack,
+      use_case: useCase,
+      search_mode: searchMode,
+    });
+  }, [runSearch, searchTerm, daysBack, useCase, searchMode]);
 
   const handleTutorialClose = () => {
     setShowTutorial(false);
@@ -115,42 +164,23 @@ function Dashboard() {
     setShowTutorial(true);
   };
 
-
-  const handleUseCaseToggle = async (newUseCase) => {
-    console.log(`🎯 Toggle clicked: ${newUseCase}`);
+  const handleUseCaseToggle = (newUseCase) => {
     setUseCase(newUseCase);
-    
-    // Re-search if we have articles and a search term, regardless of search mode
-    if (articles.length > 0 && searchTerm) {
-      setLoading(true);
-      setArticles([]); // Clear articles first
-      setError('');
-      
-      try {
-        console.log(`🔄 Re-searching with use case: ${newUseCase}`);
-        const endpoint = searchMode === 'pubmed' ? '/articles/search-pubmed' : '/articles/search';
-        const response = await axios.post(endpoint, {
-          therapeutic_area: searchTerm,
-          days_back: daysBack,
-          use_case: newUseCase
-        });
-        
-        // Force a complete re-render by creating a new array
-        setArticles([...response.data]);
-        console.log(`✅ Updated with ${response.data.length} articles for ${newUseCase} use case`);
-      } catch (error) {
-        console.error('Error re-ranking articles:', error);
-        setError(`Failed to update articles for ${newUseCase} use case. Please try searching again.`);
-      }
-      setLoading(false);
+
+    if (searchTerm.trim()) {
+      runSearch({
+        therapeutic_area: searchTerm,
+        days_back: daysBack,
+        use_case: newUseCase,
+        search_mode: searchMode,
+      });
     }
   };
 
   return (
     <div className="h-screen flex bg-gray-50">
-      {/* Tutorial Modal */}
       <TutorialModal open={showTutorial} onClose={handleTutorialClose} />
-      {/* '?' Button - bottom right, floating, unobtrusive */}
+
       <button
         onClick={handleTutorialOpen}
         className="fixed bottom-6 right-6 z-40 bg-primary-600 text-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg hover:bg-primary-700 focus:outline-none"
@@ -160,9 +190,8 @@ function Dashboard() {
       >
         ?
       </button>
-      {/* Main Content */}
+
       <div className="flex-1 flex flex-col">
-        {/* Search Section */}
         <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
@@ -171,19 +200,24 @@ function Dashboard() {
                   <Search className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
+                  ref={searchInputRef}
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   placeholder="Search by therapeutic area (e.g., Oncology, Cardiovascular)..."
                   className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                 />
               </div>
+              <p className="text-xs text-gray-500 mt-1 flex items-center">
+                <Zap className="h-3 w-3 mr-1" />
+                Press Enter to search • Ctrl/Cmd+K to focus
+              </p>
             </div>
             <div className="flex gap-2">
               <select
                 value={daysBack}
-                onChange={(e) => setDaysBack(parseInt(e.target.value))}
+                onChange={(e) => setDaysBack(parseInt(e.target.value, 10))}
                 className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
               >
                 <option value={1}>Last 24 hours</option>
@@ -193,7 +227,7 @@ function Dashboard() {
               </select>
               <button
                 onClick={handleSearch}
-                disabled={loading}
+                disabled={loading || !searchTerm.trim()}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
               >
                 {loading ? (
@@ -205,7 +239,7 @@ function Dashboard() {
               </button>
             </div>
           </div>
-          {/* Conditional toggles - only show when not viewing article detail */}
+
           {!selectedArticle && (
             <div className="mt-3 flex items-center space-x-4">
               <span className="text-sm font-medium text-gray-700">Use Case:</span>
@@ -233,43 +267,27 @@ function Dashboard() {
               </div>
             </div>
           )}
-          {/* Search Mode Toggle */}
+
           {!selectedArticle && (
             <div className="mt-3 flex items-center gap-4">
-              <div className="flex items-center space-x-4">
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="searchMode"
-                    value="local"
-                    checked={searchMode === 'local'}
-                    onChange={(e) => setSearchMode(e.target.value)}
-                    className="mr-2"
-                  />
-                  <span className="text-sm text-gray-700 flex items-center">
-                    <Database className="h-4 w-4 mr-1" />
-                    Local Database
-                  </span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="searchMode"
-                    value="pubmed"
-                    checked={searchMode === 'pubmed'}
-                    onChange={(e) => setSearchMode(e.target.value)}
-                    className="mr-2"
-                  />
-                  <span className="text-sm text-gray-700 flex items-center">
-                    <Globe className="h-4 w-4 mr-1" />
-                    PubMed Search
-                  </span>
-                </label>
-              </div>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="searchMode"
+                  value="pubmed"
+                  checked={searchMode === 'pubmed'}
+                  onChange={(e) => setSearchMode(e.target.value)}
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-700 flex items-center">
+                  <Globe className="h-4 w-4 mr-1" />
+                  PubMed Search
+                </span>
+              </label>
             </div>
           )}
         </div>
-        {/* Content Area */}
+
         <div className="flex-1 min-h-0 overflow-y-auto">
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-md p-4 m-4">
@@ -282,7 +300,13 @@ function Dashboard() {
                 <div className="ml-3">
                   <p className="text-sm text-red-800">{error}</p>
                 </div>
-                <div className="ml-auto pl-3">
+                <div className="ml-auto pl-3 flex items-center gap-2">
+                  <button
+                    onClick={handleSearch}
+                    className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200"
+                  >
+                    Retry
+                  </button>
                   <button
                     onClick={() => setError('')}
                     className="text-red-400 hover:text-red-600"
@@ -296,36 +320,39 @@ function Dashboard() {
               </div>
             </div>
           )}
+
           {loading && (
             <div className="text-center p-6">
-              <p className="text-sm text-gray-600 mb-4">{searchStatus}</p>
-              {searchMode === 'pubmed' && searchProgress > 0 ? (
-                <div className="w-full max-w-md mx-auto">
-                  <div className="bg-gray-200 rounded-full h-3">
-                    <div 
-                      className="bg-primary-600 h-3 rounded-full transition-all duration-300"
-                      style={{ width: `${searchProgress}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-sm text-gray-700 mt-2 font-medium">{Math.round(searchProgress)}% complete</p>
+              <p className="text-sm text-gray-600 mb-4">{searchStatus || 'Searching...'}</p>
+              <div className="w-full max-w-md mx-auto">
+                <div className="bg-gray-200 rounded-full h-3">
+                  <div
+                    className="bg-primary-600 h-3 rounded-full transition-all duration-300"
+                    style={{ width: `${searchProgress || 8}%` }}
+                  />
                 </div>
-              ) : (
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-              )}
+                <p className="text-sm text-gray-700 mt-2 font-medium">{Math.round(searchProgress)}% complete</p>
+              </div>
             </div>
           )}
+
+          {!loading && searchStatus && (
+            <p className="text-center text-xs text-gray-500 py-2">{searchStatus}</p>
+          )}
+
           {selectedArticle ? (
-            <ArticleDetail 
-              article={selectedArticle} 
+            <ArticleDetail
+              article={selectedArticle}
               onBack={() => setSelectedArticle(null)}
+              useCase={useCase}
             />
           ) : (
-            <ArticleList 
+            <ArticleList
               articles={articles}
-              loading={false} // Set to false to prevent duplicate spinners
+              loading={false}
               onArticleSelect={setSelectedArticle}
-              onSaveArticle={handleSaveArticle}
-              useCase={useCase} // Pass dynamic useCase
+              useCase={useCase}
+              hasSearched={hasSearched}
             />
           )}
         </div>
@@ -334,4 +361,4 @@ function Dashboard() {
   );
 }
 
-export default Dashboard; 
+export default Dashboard;

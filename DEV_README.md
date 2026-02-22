@@ -90,23 +90,21 @@ curl http://localhost:8000/debug/db-count
 # Your production Railway server still has 60+ articles
 ```
 
-### Test 2: PubMed Search (No Auto-Save)
-1. Switch to "PubMed Search" mode
-2. Search for "cardiology"
-3. Articles appear but DON'T save to local database
-4. Switch back to "Local Database" → still 0 articles
+### Test 2: PubMed Search Flow
+1. Search for "cardiology"
+2. Confirm progress indicator appears while search runs
+3. Repeat the exact same search → results should load instantly from in-session cache
 
 ### Test 3: Use Case Toggle
 1. Search PubMed for "neurology"
 2. Note reliability scores
 3. Toggle between "Clinical" and "Exploratory"
-4. Scores should change dynamically
+4. Scores should update dynamically (and re-use cache when available)
 
-### Test 4: Manual Save
-1. Search PubMed for articles
-2. Click "Save Article" button on specific articles
-3. Check local database count increases
-4. Switch to "Local Database" to see saved articles
+### Test 4: UX Shortcuts
+1. Press `Cmd/Ctrl + K` from anywhere in dashboard
+2. Search input should gain focus instantly
+3. Press `Enter` in search input to run search
 
 ## 🔄 Environment Management
 
