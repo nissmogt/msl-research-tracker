@@ -44,6 +44,7 @@ function Dashboard() {
   const searchCacheRef = useRef(new Map());
   const abortControllerRef = useRef(null);
   const progressIntervalRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -54,6 +55,18 @@ function Dashboard() {
         clearInterval(progressIntervalRef.current);
       }
     };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
   const cacheKey = (term, mode, days, currentUseCase, limit) => {
@@ -210,7 +223,7 @@ function Dashboard() {
   };
 
   return (
-    <div className="h-screen flex bg-gray-50">
+    <div className="min-h-screen flex bg-gray-50">
       <TutorialModal open={showTutorial} onClose={handleTutorialClose} />
 
       <button
@@ -224,7 +237,7 @@ function Dashboard() {
       </button>
 
       <div className="flex-1 flex flex-col">
-        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4">
+        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sticky top-0 z-20">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
@@ -232,6 +245,7 @@ function Dashboard() {
                   <Search className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
+                  ref={searchInputRef}
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -245,7 +259,7 @@ function Dashboard() {
               <select
                 value={daysBack}
                 onChange={(e) => setDaysBack(parseInt(e.target.value, 10))}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
               >
                 <option value={1}>Last 24 hours</option>
                 <option value={7}>Last 7 days</option>
@@ -255,7 +269,7 @@ function Dashboard() {
               <select
                 value={maxResults}
                 onChange={(e) => setMaxResults(parseInt(e.target.value, 10))}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+                className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
               >
                 <option value={5}>Top 5</option>
                 <option value={10}>Top 10</option>
@@ -265,7 +279,7 @@ function Dashboard() {
               <button
                 onClick={() => handleSearch()}
                 disabled={loading}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
+                className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
               >
                 {loading ? (
                   <Loader className="h-4 w-4 animate-spin mr-2" />
@@ -277,7 +291,7 @@ function Dashboard() {
               <button
                 onClick={() => handleSearch({ forceFresh: true })}
                 disabled={loading || !searchTerm.trim()}
-                className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                className="w-full sm:w-auto inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                 title="Ignore cache and fetch fresh results"
               >
                 <Zap className="h-4 w-4 mr-1" />
@@ -285,6 +299,10 @@ function Dashboard() {
               </button>
             </div>
           </div>
+
+          {!selectedArticle && (
+            <p className="mt-2 text-xs text-gray-500">Tip: press Enter to search, Cmd/Ctrl + K to jump to search.</p>
+          )}
 
           {recentSearches.length > 0 && !selectedArticle && (
             <div className="mt-3 flex items-center gap-2 flex-wrap">
@@ -302,7 +320,7 @@ function Dashboard() {
           )}
 
           {!selectedArticle && (
-            <div className="mt-3 flex items-center space-x-4">
+            <div className="mt-3 flex flex-wrap items-center gap-3">
               <span className="text-sm font-medium text-gray-700">Use Case:</span>
               <div className="flex bg-gray-100 rounded-lg p-1">
                 <button
@@ -331,7 +349,7 @@ function Dashboard() {
 
           {!selectedArticle && (
             <div className="mt-3 flex items-center gap-4 flex-wrap">
-              <div className="flex items-center space-x-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                 <label className="flex items-center">
                   <input
                     type="radio"
@@ -378,7 +396,14 @@ function Dashboard() {
                 <div className="ml-3">
                   <p className="text-sm text-red-800">{error}</p>
                 </div>
-                <div className="ml-auto pl-3">
+                <div className="ml-auto pl-3 flex items-center gap-2">
+                  <button
+                    onClick={() => handleSearch({ forceFresh: true })}
+                    className="text-xs px-2 py-1 rounded border border-red-200 text-red-700 hover:bg-red-100"
+                    disabled={loading || !searchTerm.trim()}
+                  >
+                    Retry
+                  </button>
                   <button
                     onClick={() => setError('')}
                     className="text-red-400 hover:text-red-600"
@@ -416,6 +441,7 @@ function Dashboard() {
             <ArticleDetail
               article={selectedArticle}
               onBack={() => setSelectedArticle(null)}
+              useCase={useCase}
             />
           ) : (
             <ArticleList

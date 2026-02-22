@@ -46,7 +46,7 @@ function ArticleDetail({ article, onBack, useCase = 'clinical' }) {
 
   return (
     <div className="h-full overflow-y-auto bg-gray-50">
-      <div className="max-w-4xl mx-auto p-6">
+      <div className="max-w-4xl mx-auto p-4 sm:p-6">
         <div className="mb-6">
           <button
             onClick={onBack}
@@ -56,21 +56,21 @@ function ArticleDetail({ article, onBack, useCase = 'clinical' }) {
             Back to articles
           </button>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex justify-between items-start mb-4">
-              <h1 className="text-2xl font-bold text-gray-900 pr-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-4">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 sm:pr-4">
                 {article.title}
               </h1>
               <button
                 onClick={() => window.open(article.link, '_blank', 'noopener,noreferrer')}
-                className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600"
+                className="self-end sm:self-auto flex-shrink-0 p-2 text-gray-400 hover:text-gray-600"
                 title="Open in PubMed"
               >
                 <ExternalLink className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="flex flex-wrap items-center text-sm text-gray-500 mb-4 space-x-6">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center text-sm text-gray-500 mb-4 gap-2 sm:gap-6">
               <div className="flex items-center">
                 <User className="h-4 w-4 mr-1" />
                 <span>{article.authors?.join(', ') || 'Unknown authors'}</span>
@@ -82,7 +82,7 @@ function ArticleDetail({ article, onBack, useCase = 'clinical' }) {
             </div>
 
             {article.journal && (
-              <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm text-gray-600 mb-4 gap-2">
                 <div>
                   <span className="font-medium">Journal:</span> {article.journal}
                 </div>
@@ -117,18 +117,18 @@ function ArticleDetail({ article, onBack, useCase = 'clinical' }) {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
             <h2 className="text-xl font-semibold text-gray-900 flex items-center">
               <Brain className="h-5 w-5 mr-2 text-primary-600" />
               Medical Affairs Insights
             </h2>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
               {insights && (
                 <button
                   onClick={() => generateInsights({ force: true })}
                   disabled={loadingInsights}
-                  className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                  className="w-full sm:w-auto inline-flex items-center justify-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                 >
                   <RefreshCcw className="h-4 w-4 mr-2" />
                   Refresh
@@ -137,7 +137,7 @@ function ArticleDetail({ article, onBack, useCase = 'clinical' }) {
               <button
                 onClick={() => generateInsights()}
                 disabled={loadingInsights}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
+                className="w-full sm:w-auto inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
               >
                 {loadingInsights ? (
                   <>
