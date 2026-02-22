@@ -1,115 +1,137 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import {
   Search,
   Loader,
+  Database,
   Globe,
+  Clock3,
   Zap
 } from 'lucide-react';
 import ArticleList from './ArticleList';
 import ArticleDetail from './ArticleDetail';
 import TutorialModal from './TutorialModal';
 
+const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
+const RECENT_SEARCHES_KEY = 'msl_recent_searches_v1';
+
 function Dashboard() {
   const [articles, setArticles] = useState([]);
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [daysBack, setDaysBack] = useState(7);
+  const [maxResults, setMaxResults] = useState(10);
   const [loading, setLoading] = useState(false);
-  const [searchMode, setSearchMode] = useState('pubmed');
+  const [searchMode, setSearchMode] = useState('local'); // 'local' or 'pubmed'
   const [showTutorial, setShowTutorial] = useState(() => {
     return localStorage.getItem('msl_tutorial_complete') !== 'true';
   });
-  const [searchStatus, setSearchStatus] = useState('');
+  const [searchStatus, setSearchStatus] = useState('Ready');
   const [searchProgress, setSearchProgress] = useState(0);
-  const [useCase, setUseCase] = useState('clinical');
+  const [useCase, setUseCase] = useState('clinical'); // 'clinical' or 'exploratory'
   const [error, setError] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+  const [recentSearches, setRecentSearches] = useState(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_SEARCHES_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
 
   const searchCacheRef = useRef(new Map());
-  const inFlightControllerRef = useRef(null);
+  const abortControllerRef = useRef(null);
   const progressIntervalRef = useRef(null);
-  const searchInputRef = useRef(null);
 
-  const buildSearchKey = useCallback((params) => {
-    return JSON.stringify({
-      therapeutic_area: params.therapeutic_area.trim().toLowerCase(),
-      days_back: params.days_back,
-      use_case: params.use_case,
-      search_mode: params.search_mode,
-    });
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+    };
   }, []);
 
-  const clearProgressTimer = useCallback(() => {
+  const cacheKey = (term, mode, days, currentUseCase, limit) => {
+    return `${mode}::${term.trim().toLowerCase()}::${days}::${currentUseCase}::${limit}`;
+  };
+
+  const setRecent = (term) => {
+    const cleaned = term.trim();
+    if (!cleaned) return;
+    const next = [cleaned, ...recentSearches.filter((x) => x.toLowerCase() !== cleaned.toLowerCase())].slice(0, 8);
+    setRecentSearches(next);
+    localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next));
+  };
+
+  const clearProgressTimer = () => {
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
       progressIntervalRef.current = null;
     }
-  }, []);
+  };
 
-  useEffect(() => {
-    const handleGlobalShortcut = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        searchInputRef.current?.focus();
-      }
-    };
+  const performSearch = async ({
+    term,
+    mode,
+    days,
+    currentUseCase,
+    limit,
+    forceFresh = false,
+  }) => {
+    const trimmed = term.trim();
+    if (!trimmed) return;
 
-    window.addEventListener('keydown', handleGlobalShortcut);
-    return () => window.removeEventListener('keydown', handleGlobalShortcut);
-  }, []);
+    const key = cacheKey(trimmed, mode, days, currentUseCase, limit);
+    const cached = searchCacheRef.current.get(key);
+    const now = Date.now();
 
-  useEffect(() => {
-    return () => {
-      clearProgressTimer();
-      inFlightControllerRef.current?.abort();
-    };
-  }, [clearProgressTimer]);
-
-  const runSearch = useCallback(async ({ therapeutic_area, days_back, use_case, search_mode }, { force = false } = {}) => {
-    const normalizedTerm = therapeutic_area.trim();
-    if (!normalizedTerm) return;
-
-    setError('');
-    setSearchStatus('');
-    setHasSearched(true);
-
-    const key = buildSearchKey({ therapeutic_area: normalizedTerm, days_back, use_case, search_mode });
-
-    if (!force && searchCacheRef.current.has(key)) {
-      setArticles(searchCacheRef.current.get(key));
-      setSearchStatus('Loaded from recent search');
-      setTimeout(() => setSearchStatus(''), 1200);
+    if (!forceFresh && cached && now - cached.ts < SEARCH_CACHE_TTL_MS) {
+      setArticles(cached.data);
+      setSearchStatus(`Loaded ${cached.data.length} cached results`);
+      setHasSearched(true);
       return;
     }
 
-    inFlightControllerRef.current?.abort();
-    clearProgressTimer();
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
 
     const controller = new AbortController();
-    inFlightControllerRef.current = controller;
+    abortControllerRef.current = controller;
 
     setLoading(true);
+    setError('');
     setSearchProgress(0);
 
     try {
-      const endpoint = search_mode === 'pubmed' ? '/articles/search-pubmed' : '/articles/search';
+      const endpoint = '/articles/search-pubmed';
 
-      if (search_mode === 'pubmed') {
-        setSearchStatus('Searching PubMed (usually 10–20s)...');
-        progressIntervalRef.current = setInterval(() => {
-          setSearchProgress((prev) => (prev >= 92 ? prev : prev + Math.random() * 8));
-        }, 450);
-      } else {
-        setSearchStatus('Searching local database...');
-      }
+      setSearchStatus(
+        mode === 'pubmed'
+          ? 'Searching PubMed + scoring reliability...'
+          : 'Searching local-style flow (fast mode)...'
+      );
+
+      clearProgressTimer();
+      progressIntervalRef.current = setInterval(() => {
+        setSearchProgress((prev) => {
+          if (prev >= 92) return prev;
+          return prev + Math.random() * 8;
+        });
+      }, 350);
 
       const response = await axios.post(
         endpoint,
         {
-          therapeutic_area: normalizedTerm,
-          days_back,
-          use_case,
+          therapeutic_area: trimmed,
+          days_back: days,
+          use_case: currentUseCase,
+          max_results: limit,
         },
         { signal: controller.signal }
       );
@@ -117,43 +139,42 @@ function Dashboard() {
       clearProgressTimer();
       setSearchProgress(100);
 
-      const payload = Array.isArray(response.data) ? response.data : [];
-      searchCacheRef.current.set(key, payload);
-      setArticles(payload);
-      setSelectedArticle(null);
-      setSearchStatus('');
+      const resultList = Array.isArray(response.data) ? response.data : [];
+      searchCacheRef.current.set(key, { ts: Date.now(), data: resultList });
+      setArticles(resultList);
+      setRecent(trimmed);
+      setHasSearched(true);
+      setSearchStatus(`Loaded ${resultList.length} result${resultList.length === 1 ? '' : 's'}`);
     } catch (err) {
-      clearProgressTimer();
-
-      if (err?.code === 'ERR_CANCELED' || axios.isCancel?.(err)) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') {
         return;
       }
-
-      if (search_mode === 'local' && err?.response?.status === 404) {
-        setSearchMode('pubmed');
-        setSearchStatus('Local search unavailable. Switching to PubMed...');
-        await runSearch({ therapeutic_area: normalizedTerm, days_back, use_case, search_mode: 'pubmed' }, { force: true });
-        return;
-      }
-
       console.error('[Dashboard] Error searching articles:', err);
+      setHasSearched(true);
       setError(`Search failed: ${err.response?.data?.detail || err.message || 'Unknown error'}. Please try again.`);
-      setSearchStatus('');
+      setSearchStatus('Search failed');
     } finally {
+      clearProgressTimer();
       setLoading(false);
-      setSearchProgress(0);
-      inFlightControllerRef.current = null;
+      setTimeout(() => setSearchProgress(0), 250);
     }
-  }, [buildSearchKey, clearProgressTimer]);
+  };
 
-  const handleSearch = useCallback(() => {
-    runSearch({
-      therapeutic_area: searchTerm,
-      days_back: daysBack,
-      use_case: useCase,
-      search_mode: searchMode,
+  const handleSearch = async ({ forceFresh = false } = {}) => {
+    if (!searchTerm.trim()) {
+      setError('Please enter a therapeutic area to search.');
+      return;
+    }
+
+    await performSearch({
+      term: searchTerm,
+      mode: searchMode,
+      days: daysBack,
+      currentUseCase: useCase,
+      limit: maxResults,
+      forceFresh,
     });
-  }, [runSearch, searchTerm, daysBack, useCase, searchMode]);
+  };
 
   const handleTutorialClose = () => {
     setShowTutorial(false);
@@ -164,17 +185,28 @@ function Dashboard() {
     setShowTutorial(true);
   };
 
-  const handleUseCaseToggle = (newUseCase) => {
+  const handleUseCaseToggle = async (newUseCase) => {
     setUseCase(newUseCase);
-
     if (searchTerm.trim()) {
-      runSearch({
-        therapeutic_area: searchTerm,
-        days_back: daysBack,
-        use_case: newUseCase,
-        search_mode: searchMode,
+      await performSearch({
+        term: searchTerm,
+        mode: searchMode,
+        days: daysBack,
+        currentUseCase: newUseCase,
+        limit: maxResults,
       });
     }
+  };
+
+  const quickAreaSearch = async (area) => {
+    setSearchTerm(area);
+    await performSearch({
+      term: area,
+      mode: searchMode,
+      days: daysBack,
+      currentUseCase: useCase,
+      limit: maxResults,
+    });
   };
 
   return (
@@ -200,21 +232,16 @@ function Dashboard() {
                   <Search className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
-                  ref={searchInputRef}
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                  placeholder="Search by therapeutic area (e.g., Oncology, Cardiovascular)..."
+                  placeholder="Search therapeutic area (e.g., Oncology, Neurology)..."
                   className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                 />
               </div>
-              <p className="text-xs text-gray-500 mt-1 flex items-center">
-                <Zap className="h-3 w-3 mr-1" />
-                Press Enter to search • Ctrl/Cmd+K to focus
-              </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <select
                 value={daysBack}
                 onChange={(e) => setDaysBack(parseInt(e.target.value, 10))}
@@ -225,9 +252,19 @@ function Dashboard() {
                 <option value={30}>Last 30 days</option>
                 <option value={90}>Last 90 days</option>
               </select>
+              <select
+                value={maxResults}
+                onChange={(e) => setMaxResults(parseInt(e.target.value, 10))}
+                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value={5}>Top 5</option>
+                <option value={10}>Top 10</option>
+                <option value={15}>Top 15</option>
+                <option value={20}>Top 20</option>
+              </select>
               <button
-                onClick={handleSearch}
-                disabled={loading || !searchTerm.trim()}
+                onClick={() => handleSearch()}
+                disabled={loading}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50"
               >
                 {loading ? (
@@ -237,8 +274,32 @@ function Dashboard() {
                 )}
                 Search
               </button>
+              <button
+                onClick={() => handleSearch({ forceFresh: true })}
+                disabled={loading || !searchTerm.trim()}
+                className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                title="Ignore cache and fetch fresh results"
+              >
+                <Zap className="h-4 w-4 mr-1" />
+                Refresh
+              </button>
             </div>
           </div>
+
+          {recentSearches.length > 0 && !selectedArticle && (
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              <Clock3 className="h-4 w-4 text-gray-500" />
+              {recentSearches.map((term) => (
+                <button
+                  key={term}
+                  onClick={() => quickAreaSearch(term)}
+                  className="px-2.5 py-1 rounded-full border border-gray-200 text-xs text-gray-700 hover:bg-gray-100"
+                >
+                  {term}
+                </button>
+              ))}
+            </div>
+          )}
 
           {!selectedArticle && (
             <div className="mt-3 flex items-center space-x-4">
@@ -269,21 +330,38 @@ function Dashboard() {
           )}
 
           {!selectedArticle && (
-            <div className="mt-3 flex items-center gap-4">
-              <label className="flex items-center">
-                <input
-                  type="radio"
-                  name="searchMode"
-                  value="pubmed"
-                  checked={searchMode === 'pubmed'}
-                  onChange={(e) => setSearchMode(e.target.value)}
-                  className="mr-2"
-                />
-                <span className="text-sm text-gray-700 flex items-center">
-                  <Globe className="h-4 w-4 mr-1" />
-                  PubMed Search
-                </span>
-              </label>
+            <div className="mt-3 flex items-center gap-4 flex-wrap">
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="searchMode"
+                    value="local"
+                    checked={searchMode === 'local'}
+                    onChange={(e) => setSearchMode(e.target.value)}
+                    className="mr-2"
+                  />
+                  <span className="text-sm text-gray-700 flex items-center">
+                    <Database className="h-4 w-4 mr-1" />
+                    Local-style
+                  </span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="searchMode"
+                    value="pubmed"
+                    checked={searchMode === 'pubmed'}
+                    onChange={(e) => setSearchMode(e.target.value)}
+                    className="mr-2"
+                  />
+                  <span className="text-sm text-gray-700 flex items-center">
+                    <Globe className="h-4 w-4 mr-1" />
+                    PubMed Search
+                  </span>
+                </label>
+              </div>
+              <div className="text-xs text-gray-500">{searchStatus}</div>
             </div>
           )}
         </div>
@@ -300,13 +378,7 @@ function Dashboard() {
                 <div className="ml-3">
                   <p className="text-sm text-red-800">{error}</p>
                 </div>
-                <div className="ml-auto pl-3 flex items-center gap-2">
-                  <button
-                    onClick={handleSearch}
-                    className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200"
-                  >
-                    Retry
-                  </button>
+                <div className="ml-auto pl-3">
                   <button
                     onClick={() => setError('')}
                     className="text-red-400 hover:text-red-600"
@@ -323,34 +395,34 @@ function Dashboard() {
 
           {loading && (
             <div className="text-center p-6">
-              <p className="text-sm text-gray-600 mb-4">{searchStatus || 'Searching...'}</p>
-              <div className="w-full max-w-md mx-auto">
-                <div className="bg-gray-200 rounded-full h-3">
-                  <div
-                    className="bg-primary-600 h-3 rounded-full transition-all duration-300"
-                    style={{ width: `${searchProgress || 8}%` }}
-                  />
+              <p className="text-sm text-gray-600 mb-4">{searchStatus}</p>
+              {searchProgress > 0 ? (
+                <div className="w-full max-w-md mx-auto">
+                  <div className="bg-gray-200 rounded-full h-3">
+                    <div
+                      className="bg-primary-600 h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${searchProgress}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-sm text-gray-700 mt-2 font-medium">{Math.round(searchProgress)}% complete</p>
                 </div>
-                <p className="text-sm text-gray-700 mt-2 font-medium">{Math.round(searchProgress)}% complete</p>
-              </div>
+              ) : (
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              )}
             </div>
-          )}
-
-          {!loading && searchStatus && (
-            <p className="text-center text-xs text-gray-500 py-2">{searchStatus}</p>
           )}
 
           {selectedArticle ? (
             <ArticleDetail
               article={selectedArticle}
               onBack={() => setSelectedArticle(null)}
-              useCase={useCase}
             />
           ) : (
             <ArticleList
               articles={articles}
               loading={false}
               onArticleSelect={setSelectedArticle}
+              onSaveArticle={null}
               useCase={useCase}
               hasSearched={hasSearched}
             />

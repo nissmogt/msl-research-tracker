@@ -248,11 +248,11 @@ def smart_cache():
     return decorator
 
 @smart_cache()
-def cached_pubmed_search(therapeutic_area: str, days_back: int):
+def cached_pubmed_search(therapeutic_area: str, days_back: int, max_results: int = 10):
     """Smart cached PubMed search with impact factor sorting"""
     pubmed_service = PubMedService()
-    articles = pubmed_service.search_articles(therapeutic_area, days_back)
-    
+    articles = pubmed_service.search_articles(therapeutic_area, days_back, max_results=max_results)
+
     # Note: Impact factor sorting will be done in the endpoint with DB access
     return articles
 
@@ -291,13 +291,26 @@ def get_reliability_tier(impact_factor):
     if impact_factor >= 50:
         return 'Tier 1: Highest reliability'
     elif impact_factor >= 10:
-        return 'Tier 2: High reliability'  
+        return 'Tier 2: High reliability'
     elif impact_factor >= 5:
         return 'Tier 3: Good reliability'
     elif impact_factor >= 2:
         return 'Tier 4: Standard reliability'
     else:
         return 'Tier 5: Lower reliability'
+
+
+SEARCH_RESPONSE_CACHE = {}
+SEARCH_RESPONSE_TTL_SECONDS = 300
+
+
+def _search_response_cache_key(request: SearchRequest) -> str:
+    return "::".join([
+        request.therapeutic_area.strip().lower(),
+        str(request.days_back),
+        request.use_case.strip().lower(),
+        str(request.max_results),
+    ])
 
 # Article search endpoints
 # Local database search endpoint temporarily disabled - focusing on PubMed search only
@@ -318,37 +331,42 @@ def get_reliability_tier(impact_factor):
 async def search_pubmed_only(request: SearchRequest, db: Session = Depends(get_db)):
     """Search PubMed with caching and TA-aware reliability scoring"""
     try:
-        articles = cached_pubmed_search(request.therapeutic_area, request.days_back)
+        cache_key = _search_response_cache_key(request)
+        now = time.time()
+        if request.days_back > 1 and cache_key in SEARCH_RESPONSE_CACHE:
+            cached_at, payload = SEARCH_RESPONSE_CACHE[cache_key]
+            if now - cached_at < SEARCH_RESPONSE_TTL_SECONDS:
+                print(f"🟢 RESPONSE CACHE HIT: {cache_key}")
+                return payload
+
+        articles = cached_pubmed_search(
+            request.therapeutic_area,
+            request.days_back,
+            max_results=request.max_results,
+        )
         print(f"🎯 Processing {len(articles)} articles for use case: {request.use_case}")
-        
-        # Initialize services outside the loop for efficiency
+
         reliability_meter = ReliabilityMeter()
         from journal_service import JournalImpactFactorService
         journal_service = JournalImpactFactorService()
-        
+
         response_articles = []
         for article_data in articles:
-            # Get impact factor
             impact_factor, _ = journal_service.get_impact_factor(article_data['journal'], db)
-            
-            # Get TA-aware reliability score
+
             try:
                 use_case_enum = ReliabilityUseCase.CLINICAL if request.use_case.lower() == "clinical" else ReliabilityUseCase.EXPLORATORY
                 reliability = reliability_meter.assess_reliability(
                     journal_name=article_data['journal'],
                     therapeutic_area=request.therapeutic_area,
-                    use_case=use_case_enum, 
+                    use_case=use_case_enum,
                     db=db,
                     impact_factor=impact_factor
                 )
-                print(f"✅ Reliability calculated for {article_data['journal']}: {reliability.score}")
             except Exception as e:
                 print(f"❌ Error calculating reliability for {article_data['journal']}: {e}")
-                import traceback
-                traceback.print_exc()
                 reliability = None
-            
-            # Always append article, with or without reliability data
+
             article_response = {
                 "id": None,
                 "pubmed_id": article_data['pubmed_id'],
@@ -362,7 +380,7 @@ async def search_pubmed_only(request: SearchRequest, db: Session = Depends(get_d
                 "created_at": None,
                 "impact_factor": impact_factor,
             }
-            
+
             if reliability:
                 article_response.update({
                     "reliability_tier": reliability.band.value,
@@ -372,7 +390,6 @@ async def search_pubmed_only(request: SearchRequest, db: Session = Depends(get_d
                     "uncertainty": reliability.uncertainty
                 })
             else:
-                # Fallback without reliability data
                 article_response.update({
                     "reliability_tier": get_reliability_tier(impact_factor),
                     "reliability_score": None,
@@ -380,13 +397,16 @@ async def search_pubmed_only(request: SearchRequest, db: Session = Depends(get_d
                     "reliability_reasons": None,
                     "uncertainty": None
                 })
-            
+
             response_articles.append(article_response)
-        
-        # Sort by reliability score (descending), handling None values
+
         sorted_articles = sorted(response_articles, key=lambda x: x['reliability_score'] or 0, reverse=True)
-        
-        return sorted_articles
+        result = sorted_articles[:request.max_results]
+
+        if request.days_back > 1:
+            SEARCH_RESPONSE_CACHE[cache_key] = (time.time(), result)
+
+        return result
     except Exception as e:
         print(f"❌ Error in PubMed search with reliability: {e}")
         import traceback

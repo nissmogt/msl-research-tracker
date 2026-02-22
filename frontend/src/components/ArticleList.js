@@ -5,6 +5,13 @@ import ScoringExplanationModal from './ScoringExplanationModal';
 
 function ArticleList({ articles, loading, onArticleSelect, onSaveArticle, useCase, hasSearched = false }) {
   const [showScoringModal, setShowScoringModal] = useState(false);
+
+  const formatAuthors = (authors) => {
+    if (!Array.isArray(authors) || authors.length === 0) return 'Unknown authors';
+    if (authors.length <= 4) return authors.join(', ');
+    return `${authors.slice(0, 4).join(', ')} +${authors.length - 4} more`;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -58,7 +65,7 @@ function ArticleList({ articles, loading, onArticleSelect, onSaveArticle, useCas
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    window.open(article.link, '_blank');
+                    window.open(article.link, '_blank', 'noopener,noreferrer');
                   }}
                   className="p-1 text-gray-400 hover:text-gray-600"
                   title="Open in PubMed"
@@ -71,7 +78,7 @@ function ArticleList({ articles, loading, onArticleSelect, onSaveArticle, useCas
             <div className="flex items-center text-sm text-gray-500 mb-3 space-x-4">
               <div className="flex items-center">
                 <User className="h-4 w-4 mr-1" />
-                <span>{article.authors?.join(', ') || 'Unknown authors'}</span>
+                <span>{formatAuthors(article.authors)}</span>
               </div>
               <div className="flex items-center">
                 <Calendar className="h-4 w-4 mr-1" />

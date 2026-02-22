@@ -56,6 +56,16 @@ class SearchRequest(BaseModel):
     therapeutic_area: str
     days_back: int = 7
     use_case: str = "clinical"
+    max_results: int = 10
+
+    @field_validator('max_results')
+    @classmethod
+    def clamp_max_results(cls, v):
+        if v < 1:
+            return 1
+        if v > 25:
+            return 25
+        return v
 
 class InsightRequest(BaseModel):
     pass  # No additional fields needed for now

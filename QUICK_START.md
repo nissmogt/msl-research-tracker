@@ -38,6 +38,8 @@
 2. **PubMed Search**: Works but doesn't auto-save
 3. **Use Case Toggle**: Clinical/Exploratory changes scores
 4. **Manual Save**: Save button adds to local database only
+5. **Speed UX**: recent-search chips + response caching should make repeat searches feel near-instant
+6. **Result Control**: Top-N selector (5/10/15/20) should change returned list size
 
 ## 🔄 Quick Workflow
 

@@ -21,7 +21,7 @@ class PubMedService:
         self.max_results = 10  # Reduce from 30 to 10
         self.batch_size = 10
     
-    def search_articles(self, therapeutic_area: str, days_back: int = 7) -> List[Dict]:
+    def search_articles(self, therapeutic_area: str, days_back: int = 7, max_results: Optional[int] = None) -> List[Dict]:
         """Search PubMed for articles - FAST VERSION"""
         start_time = time.time()
         print(f"🔍 Starting PubMed search for '{therapeutic_area}'...")
@@ -29,7 +29,8 @@ class PubMedService:
         try:
             # Step 1: Get article IDs
             ids_start = time.time()
-            article_ids = self._get_article_ids(therapeutic_area, days_back)
+            safe_max = max(1, min(int(max_results or self.max_results), 25))
+            article_ids = self._get_article_ids(therapeutic_area, days_back, safe_max)
             ids_time = time.time() - ids_start
             print(f"⏱️ Got {len(article_ids)} article IDs in {ids_time:.2f}s")
             
@@ -52,7 +53,7 @@ class PubMedService:
             print(f"❌ Error after {total_time:.2f}s: {e}")
             return []
     
-    def _get_article_ids(self, therapeutic_area: str, days_back: int) -> List[str]:
+    def _get_article_ids(self, therapeutic_area: str, days_back: int, max_results: int) -> List[str]:
         """Get article IDs from PubMed search"""
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days_back)
@@ -67,7 +68,7 @@ class PubMedService:
             'db': 'pubmed',
             'term': query,
             'retmode': 'xml',
-            'retmax': self.max_results,
+            'retmax': max_results,
             'sort': 'date'
         }
         

@@ -62,7 +62,7 @@ function ArticleDetail({ article, onBack, useCase = 'clinical' }) {
                 {article.title}
               </h1>
               <button
-                onClick={() => window.open(article.link, '_blank')}
+                onClick={() => window.open(article.link, '_blank', 'noopener,noreferrer')}
                 className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600"
                 title="Open in PubMed"
               >
